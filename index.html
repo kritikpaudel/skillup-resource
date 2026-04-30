@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill Up — Resource Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f0f2f5;--surface:#fff;--border:#e4e7ed;--border-soft:#f0f2f5;
+  --sidebar:#13151f;--sidebar-text:#7a7f94;
+  --accent:#3b5bdb;--accent-light:#eef2ff;--accent-dark:#2f4ac3;
+  --green:#2f9e44;--green-light:#ebfbee;
+  --orange:#e67700;--orange-light:#fff9db;
+  --red:#c92a2a;--red-light:#fff5f5;
+  --purple:#6741d9;--purple-light:#f3f0ff;
+  --cyan:#0c8599;--cyan-light:#e3fafc;
+  --yellow:#f59f00;--yellow-light:#fff9db;
+  --text:#141517;--text-2:#343a40;--muted:#6c757d;--muted-light:#adb5bd;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,.08);
+  --shadow-lg:0 8px 28px rgba(0,0,0,.13);
+  --radius:10px;--radius-lg:14px;--radius-xl:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:15px}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow-x:hidden}
+
+/* ─── SIDEBAR ─── */
+.sidebar{width:230px;min-height:100vh;background:var(--sidebar);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:60;transition:transform .25s}
+.sb-logo{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px}
+.sb-logo-icon{width:34px;height:34px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.9rem;flex-shrink:0}
+.sb-logo-text{font-size:.95rem;font-weight:800;color:#fff;letter-spacing:-.2px}
+.sb-logo-sub{font-size:.6rem;color:var(--sidebar-text);font-family:'JetBrains Mono',monospace;letter-spacing:.8px;text-transform:uppercase}
+.sb-section{padding:14px 14px 4px;font-size:.58rem;font-weight:700;color:rgba(255,255,255,.2);text-transform:uppercase;letter-spacing:1.5px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 13px;margin:1px 8px;border-radius:8px;cursor:pointer;color:var(--sidebar-text);font-size:.8rem;font-weight:500;transition:all .15s;border:none;background:none;width:calc(100% - 16px);text-align:left;position:relative}
+.nav-item i{width:14px;text-align:center;font-size:.78rem;flex-shrink:0}
+.nav-item:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav-item.active{background:rgba(59,91,219,.3);color:#fff}
+.nav-item.active i{color:#7c9ef7}
+.nav-badge{position:absolute;right:10px;background:var(--red);color:#fff;font-size:.58rem;font-weight:700;padding:1px 5px;border-radius:20px;font-family:'JetBrains Mono',monospace}
+.nav-badge.green{background:var(--green)}
+.sb-bottom{margin-top:auto;padding:12px 10px;border-top:1px solid rgba(255,255,255,.06)}
+.sb-version{text-align:center;font-size:.6rem;color:rgba(255,255,255,.15);font-family:'JetBrains Mono',monospace;margin-top:8px}
+
+/* ─── MAIN ─── */
+.main-area{margin-left:230px;flex:1;display:flex;flex-direction:column;min-height:100vh;max-width:calc(100vw - 230px)}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;box-shadow:var(--shadow)}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-title{font-size:.92rem;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+.topbar-title i{color:var(--accent);font-size:.85rem}
+.topbar-breadcrumb{font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.topbar-actions{display:flex;gap:7px;align-items:center}
+
+/* ─── SEARCH BAR ─── */
+.search-wrap{position:relative}
+.search-wrap i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted-light);font-size:.75rem;pointer-events:none}
+.search-input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px 7px 30px;font-family:'Outfit',sans-serif;font-size:.78rem;color:var(--text);outline:none;width:200px;transition:all .15s}
+.search-input:focus{border-color:var(--accent);background:#fff;width:240px}
+
+.content{padding:20px 24px;flex:1}
+.page{display:none;animation:fadeIn .2s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ─── BUTTONS ─── */
+.btn{font-family:'Outfit',sans-serif;font-size:.78rem;font-weight:600;padding:7px 13px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;white-space:nowrap}
+.btn i{font-size:.7rem}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(59,91,219,.25)}
+.btn-primary:hover{background:var(--accent-dark);box-shadow:0 4px 12px rgba(59,91,219,.35)}
+.btn-secondary{background:var(--surface);color:var(--text-2);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--bg);border-color:var(--muted-light)}
+.btn-danger{background:var(--red-light);color:var(--red);border:1px solid #ffc9c9}
+.btn-danger:hover{background:#ffe3e3}
+.btn-success{background:var(--green-light);color:var(--green);border:1px solid #b2f2bb}
+.btn-success:hover{background:#d3f9d8}
+.btn-warning{background:var(--orange-light);color:var(--orange);border:1px solid #ffec99}
+.btn-sm{padding:5px 9px;font-size:.71rem;border-radius:6px}
+.btn-xs{padding:3px 7px;font-size:.66rem;border-radius:5px}
+.btn-icon{width:29px;height:29px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px}
+.btn-icon i{font-size:.68rem;margin:0}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ─── STAT CARDS ─── */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden;transition:box-shadow .15s}
+.stat-card:hover{box-shadow:var(--shadow-md)}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--stat-color,var(--accent))}
+.stat-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.stat-label{font-size:.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.stat-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.75rem}
+.stat-value{font-size:1.7rem;font-weight:800;line-height:1;font-family:'JetBrains Mono',monospace}
+.stat-sub{font-size:.66rem;color:var(--muted);margin-top:2px}
+.stat-delta{font-size:.65rem;font-weight:600;display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;margin-top:3px}
+.delta-up{background:var(--green-light);color:var(--green)}
+.delta-down{background:var(--red-light);color:var(--red)}
+
+/* ─── TABLE CARD ─── */
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px}
+.tc-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap}
+.tc-title{font-size:.84rem;font-weight:700;display:flex;align-items:center;gap:7px;color:var(--text)}
+.tc-title i{color:var(--accent);font-size:.78rem}
+.tc-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tc-filters{display:flex;gap:6px;align-items:center;padding:8px 16px;background:#fafbfc;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.filter-chip{font-size:.7rem;font-weight:600;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s;font-family:'Outfit',sans-serif}
+.filter-chip.active{background:var(--accent-light);color:var(--accent);border-color:var(--accent)}
+.filter-chip:hover:not(.active){border-color:var(--muted-light);color:var(--text)}
+table{width:100%;border-collapse:collapse}
+thead th{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);padding:8px 13px;text-align:left;background:#fafbfc;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+thead th:hover{color:var(--text)}
+tbody tr{border-bottom:1px solid var(--border-soft);transition:background .1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:#f8f9ff}
+td{padding:10px 13px;font-size:.81rem;vertical-align:middle;color:var(--text-2)}
+td strong{color:var(--text);font-weight:600}
+.td-mono{font-family:'JetBrains Mono',monospace;font-size:.78rem}
+
+/* ─── BADGES ─── */
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.badge i{font-size:.55rem}
+.b-pending{background:var(--orange-light);color:var(--orange)}
+.b-approved{background:var(--accent-light);color:var(--accent)}
+.b-received{background:var(--green-light);color:var(--green)}
+.b-partial{background:var(--cyan-light);color:var(--cyan)}
+.b-issued{background:var(--purple-light);color:var(--purple)}
+.b-closed{background:var(--border);color:var(--muted)}
+.b-lost{background:var(--red-light);color:var(--red)}
+.b-consumed{background:var(--yellow-light);color:var(--yellow)}
+.b-neutral{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+.cat-tag{display:inline-block;font-size:.66rem;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+
+/* ─── SECTION HEADER ─── */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:18px}
+.sec-title{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;align-items:center;gap:6px}
+.sec-title i{font-size:.68rem}
+
+/* ─── MODULE CARDS (overview) ─── */
+.module-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:13px;margin-bottom:18px}
+.module-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;cursor:pointer;transition:all .2s;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.module-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.module-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--mc)}
+.mc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.mc-num{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:2px;font-family:'JetBrains Mono',monospace}
+.mc-name{font-size:.94rem;font-weight:800;color:var(--text);margin-bottom:2px}
+.mc-meta{font-size:.69rem;color:var(--muted);display:flex;align-items:center;gap:5px;margin-top:2px}
+.mc-meta i{font-size:.62rem}
+.mc-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+.mc-stats{display:flex;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft)}
+.mc-stat-num{font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:700}
+.mc-stat-lbl{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+
+/* ─── ALERT CARDS ─── */
+.alert-card{border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;display:flex;align-items:flex-start;gap:10px;font-size:.79rem}
+.alert-card i{font-size:.85rem;margin-top:1px;flex-shrink:0}
+.alert-warn{background:var(--orange-light);border:1px solid #ffd8a8;color:var(--orange)}
+.alert-danger{background:var(--red-light);border:1px solid #ffc9c9;color:var(--red)}
+.alert-info{background:var(--accent-light);border:1px solid #bac8ff;color:var(--accent)}
+.alert-success{background:var(--green-light);border:1px solid #b2f2bb;color:var(--green)}
+
+/* ─── PILLS ─── */
+.week-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.week-pill{font-size:.73rem;font-weight:600;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px;font-family:'Outfit',sans-serif}
+.week-pill i{font-size:.62rem}
+.week-pill.active{border-color:var(--wc);color:var(--wc);background:var(--wb)}
+.week-pill:hover:not(.active){border-color:var(--muted-light);color:var(--text)}
+
+/* ─── MODULE INFO BANNER ─── */
+.mod-banner{display:flex;align-items:center;gap:11px;margin-bottom:15px;padding:12px 15px;border-radius:10px;border:1px solid var(--bc)}
+.mod-banner-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.mod-banner-name{font-size:.88rem;font-weight:800;color:var(--text)}
+.mod-banner-meta{font-size:.7rem;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mod-banner-meta span{display:flex;align-items:center;gap:4px}
+.mod-banner-meta i{font-size:.62rem}
+
+/* ─── PROGRESS ─── */
+.prog-wrap{background:var(--border);border-radius:99px;height:4px;min-width:60px;margin-top:3px}
+.prog-fill{height:100%;border-radius:99px;transition:width .3s}
+
+/* ─── SUMMARY BAR ─── */
+.summary-bar{display:flex;gap:0;margin-bottom:16px;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.sb-item{flex:1;padding:10px 14px;text-align:center;border-right:1px solid var(--border);background:var(--surface)}
+.sb-item:last-child{border-right:none}
+.sb-num{font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:700}
+.sb-lbl{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* ─── MODAL ─── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.38);display:none;align-items:center;justify-content:center;z-index:999;backdrop-filter:blur(3px);animation:fadeIn .15s ease}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:0;width:520px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal-lg{width:680px}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1;border-radius:var(--radius-xl) var(--radius-xl) 0 0}
+.modal-head-title{font-size:.9rem;font-weight:800;display:flex;align-items:center;gap:8px}
+.modal-head-title i{color:var(--accent)}
+.modal-body{padding:18px 20px}
+.close-btn{background:var(--bg);border:1px solid var(--border);color:var(--muted);width:26px;height:26px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.75rem;transition:all .15s}
+.close-btn:hover{color:var(--text);background:var(--border)}
+
+/* ─── FORMS ─── */
+.form-group{margin-bottom:12px}
+.form-label{font-size:.67rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.req{color:var(--red)}
+input[type=text],input[type=number],input[type=date],input[type=email],select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 11px;font-family:'Outfit',sans-serif;font-size:.83rem;outline:none;transition:border .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(59,91,219,.08)}
+select option{background:#fff}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border);margin-top:14px}
+.form-hint{font-size:.67rem;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:4px}
+.form-hint i{font-size:.62rem}
+.info-row{background:var(--accent-light);border:1px solid #bac8ff;border-radius:8px;padding:9px 12px;font-size:.75rem;color:var(--accent);display:flex;align-items:flex-start;gap:8px;margin-bottom:12px}
+.info-row i{margin-top:1px;flex-shrink:0}
+.warn-row{background:var(--orange-light);border:1px solid #ffd8a8;border-radius:8px;padding:9px 12px;font-size:.75rem;color:var(--orange);display:flex;align-items:flex-start;gap:8px;margin-bottom:12px}
+hr.form-divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+
+/* ─── SETUP CARD ─── */
+.setup-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:13px 16px;margin-bottom:8px;display:flex;align-items:center;box-shadow:var(--shadow);transition:box-shadow .15s}
+.setup-card:hover{box-shadow:var(--shadow-md)}
+.setup-card-left{flex:1}
+.setup-card-label{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:2px;font-family:'JetBrains Mono',monospace}
+.setup-card-name{font-size:.88rem;font-weight:700}
+.setup-card-meta{font-size:.69rem;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.setup-card-meta span{display:flex;align-items:center;gap:3px}
+.setup-card-meta i{font-size:.62rem}
+
+/* ─── ACTIVITY LOG ─── */
+.activity-item{display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--border-soft)}
+.activity-item:last-child{border-bottom:none}
+.activity-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.activity-text{font-size:.79rem;color:var(--text-2);flex:1}
+.activity-text strong{color:var(--text)}
+.activity-time{font-size:.65rem;color:var(--muted-light);white-space:nowrap;font-family:'JetBrains Mono',monospace}
+
+/* ─── EMPTY STATE ─── */
+.empty-state{text-align:center;padding:36px 20px;color:var(--muted)}
+.empty-state i{font-size:1.8rem;color:var(--border);margin-bottom:8px;display:block}
+.empty-state p{font-size:.82rem;margin-bottom:2px;font-weight:500}
+.empty-state small{font-size:.72rem;color:var(--muted-light)}
+
+/* ─── TOAST ─── */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--text);color:#fff;font-family:'Outfit',sans-serif;font-weight:600;font-size:.78rem;padding:10px 16px;border-radius:9px;z-index:9999;transform:translateY(60px);transition:transform .25s cubic-bezier(.34,1.56,.64,1);pointer-events:none;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow-lg)}
+#toast.show{transform:translateY(0)}
+#toast.error{background:var(--red)}
+#toast i{font-size:.8rem}
+
+/* ─── DRAGGABLE UPLOAD ─── */
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:28px 20px;text-align:center;cursor:pointer;transition:all .15s;color:var(--muted)}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
+.drop-zone i{font-size:1.8rem;margin-bottom:8px;display:block}
+.drop-zone p{font-size:.82rem;font-weight:600}
+.drop-zone small{font-size:.71rem}
+
+/* ─── CHART ─── */
+.chart-bar-wrap{display:flex;align-items:flex-end;gap:6px;height:80px;padding-bottom:4px}
+.chart-bar-col{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1}
+.chart-bar{border-radius:4px 4px 0 0;width:100%;transition:height .4s;min-height:2px}
+.chart-bar-lbl{font-size:.58rem;color:var(--muted);text-align:center;font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.chart-bar-num{font-size:.6rem;color:var(--text-2);font-weight:700}
+
+/* ─── COLORS ─── */
+.clr1{color:#3b5bdb}.bg1{background:#eef2ff}
+.clr2{color:#0c8599}.bg2{background:#e3fafc}
+.clr3{color:#6741d9}.bg3{background:#f3f0ff}
+.clr4{color:#2f9e44}.bg4{background:#ebfbee}
+.clr5{color:#e67700}.bg5{background:#fff9db}
+.clr6{color:#c2255c}.bg6{background:#fff0f6}
+
+/* ─── TOOLTIP ─── */
+[title]{cursor:help}
+
+/* scrollbar */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* responsive */
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .main-area{margin-left:0}
+  .form-row,.form-row-3{grid-template-columns:1fr}
+}
+
+
+/* ─── RESPONSIVE ENHANCEMENTS ─── */
+.mobile-menu-btn{display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;width:36px;height:36px;align-items:center;justify-content:center;color:var(--text);cursor:pointer;box-shadow:var(--shadow)}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(15,18,25,.45);backdrop-filter:blur(2px);z-index:55}
+.table-card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.table-card table{min-width:920px}
+#tab-overview > div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+.topbar-actions{min-width:0}.topbar-title{white-space:nowrap}.content{min-width:0}.main-area{min-width:0}.chart-bar-wrap{min-width:420px}
+.quick-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.resource-note{font-size:.68rem;color:var(--muted);margin-top:1px;max-width:280px;white-space:normal}
+@media(max-width:1180px){
+  #tab-overview > div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+  .stats-row{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+}
+@media(max-width:900px){
+  html{font-size:14px}
+  body{display:block}
+  .mobile-menu-btn{display:inline-flex}
+  .sidebar{transform:translateX(-100%);box-shadow:var(--shadow-lg)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-backdrop.open{display:block}
+  .main-area{margin-left:0;max-width:100vw;width:100%}
+  .topbar{padding:10px 12px;gap:10px;align-items:flex-start;flex-wrap:wrap}
+  .topbar-left{width:100%;justify-content:flex-start}
+  .topbar-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .topbar-actions .search-wrap{grid-column:1/-1;width:100%}
+  .search-input,.search-input:focus{width:100%}
+  .content{padding:14px 12px}
+  .module-grid{grid-template-columns:1fr}
+  .form-row,.form-row-3{grid-template-columns:1fr}
+  .modal-overlay{align-items:flex-end}
+  .modal{width:100vw;max-width:100vw;max-height:92vh;border-radius:18px 18px 0 0}
+  .modal-head{border-radius:18px 18px 0 0}
+  .summary-bar{display:grid;grid-template-columns:repeat(2,1fr)}
+  .sb-item{border-bottom:1px solid var(--border)}
+  .desktop-only{display:none!important}
+}
+@media(max-width:560px){
+  .topbar-actions{grid-template-columns:1fr}
+  .btn{justify-content:center;width:100%}
+  .btn-icon{width:34px;height:34px}
+  .stats-row{grid-template-columns:1fr 1fr;gap:8px}
+  .stat-card{padding:12px}.stat-value{font-size:1.35rem}
+  .tc-header,.tc-filters{padding:10px;align-items:flex-start}
+  .week-pills{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  .week-pill{white-space:nowrap;flex:0 0 auto}
+  .setup-card{flex-direction:column;align-items:flex-start;gap:10px}.setup-card>div:last-child{width:100%;display:flex;gap:6px}.setup-card .btn{width:auto;flex:1}
+  .activity-item{align-items:flex-start}.activity-time{white-space:normal;text-align:right}
+}
+@media(max-width:380px){.stats-row{grid-template-columns:1fr}.topbar-title{font-size:.84rem}}
+@media print{.sidebar,.topbar,.sidebar-backdrop,.modal-overlay,#toast{display:none!important}.main-area{margin:0;max-width:100%;}.content{padding:0}.page{display:block!important}.table-card{box-shadow:none;break-inside:avoid}.btn{display:none!important}}
+
+.link-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-family:'Outfit',sans-serif;font-size:.78rem;font-weight:600;padding:0;text-decoration:underline}
+.link-btn:hover{color:var(--accent-dark)}
+
+/* ─── USER FRIENDLY FEATURE PACK ─── */
+:root{--focus:0 0 0 3px rgba(59,91,219,.18)}
+body.dark-mode{--bg:#0f1117;--surface:#171a22;--border:#252a36;--border-soft:#202532;--text:#f5f7fb;--text-2:#d7dbea;--muted:#9aa3b8;--muted-light:#747d93;--sidebar:#0b0d12;--shadow:0 1px 3px rgba(0,0,0,.35);--shadow-md:0 6px 18px rgba(0,0,0,.42);--shadow-lg:0 14px 38px rgba(0,0,0,.55)}
+body.dark-mode .topbar,body.dark-mode .table-card,body.dark-mode .modal,body.dark-mode .stat-card,body.dark-mode .module-card,body.dark-mode .setup-card,body.dark-mode .sb-item{background:var(--surface)}
+body.dark-mode input,body.dark-mode select,body.dark-mode textarea,body.dark-mode .search-input{background:#10131a;color:var(--text);border-color:var(--border)}
+body.dark-mode thead th,body.dark-mode .tc-filters{background:#131720}
+body.dark-mode tbody tr:hover{background:#171d2b}
+.skip-link{position:absolute;left:-999px;top:8px;background:var(--accent);color:#fff;padding:8px 12px;border-radius:8px;z-index:10000}.skip-link:focus{left:8px}
+.btn:focus-visible,.nav-item:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none;box-shadow:var(--focus)}
+.utility-strip{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.utility-pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:.72rem;color:var(--muted);box-shadow:var(--shadow)}.utility-pill strong{color:var(--text)}
+.health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:16px}.health-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;box-shadow:var(--shadow)}.health-title{font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px}.health-line{display:flex;justify-content:space-between;gap:10px;font-size:.8rem;padding:6px 0;border-bottom:1px solid var(--border-soft)}.health-line:last-child{border-bottom:none}.health-line strong{font-family:'JetBrains Mono',monospace}
+.command-palette{position:fixed;inset:0;background:rgba(0,0,0,.42);display:none;align-items:flex-start;justify-content:center;padding-top:9vh;z-index:1200}.command-palette.open{display:flex}.command-box{width:min(620px,94vw);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden}.command-box input{border-radius:0;border:none;border-bottom:1px solid var(--border);font-size:1rem;padding:16px 18px;background:var(--surface)}.command-list{max-height:360px;overflow:auto;padding:8px}.command-item{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;color:var(--text);text-align:left;padding:10px 12px;border-radius:10px;cursor:pointer;font-family:'Outfit',sans-serif}.command-item:hover,.command-item.active{background:var(--accent-light);color:var(--accent)}.command-item small{margin-left:auto;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.fab{position:fixed;right:18px;bottom:18px;z-index:1000;width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;border:0;box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;cursor:pointer}.fab:hover{background:var(--accent-dark)}.fab-menu{position:fixed;right:18px;bottom:76px;z-index:1000;display:none;flex-direction:column;gap:8px}.fab-menu.open{display:flex}.fab-menu .btn{box-shadow:var(--shadow-md);justify-content:flex-start;width:auto;background:var(--surface)}
+.mobile-card-list{display:none}.mobile-resource-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:var(--shadow)}.mobile-resource-card h4{font-size:.92rem;margin-bottom:5px}.mobile-resource-meta{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:.72rem;color:var(--muted);margin:8px 0}.mobile-resource-meta strong{display:block;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:.86rem}.mobile-resource-actions{display:flex;gap:6px;flex-wrap:wrap}.mobile-resource-actions .btn{width:auto;flex:1}
+.setting-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.setting-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow)}.setting-card h3{font-size:.9rem;margin-bottom:6px}.setting-card p{font-size:.76rem;color:var(--muted);margin-bottom:12px;line-height:1.35}.danger-zone{border-color:#ffc9c9;background:linear-gradient(0deg,rgba(255,245,245,.55),transparent)}
+@media(max-width:720px){.desktop-table-on-mobile table{display:none}.mobile-card-list{display:block}.fab{right:14px;bottom:14px}.fab-menu{right:14px;bottom:70px}.utility-strip{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.utility-pill{white-space:nowrap;flex:0 0 auto}}
+@media print{.fab,.fab-menu,.command-palette,.skip-link{display:none!important}body.dark-mode{background:#fff;color:#000}}
+
+
+/* ─── SUPABASE / ACCESS CONTROL ADDITIONS ─── */
+.auth-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:.72rem;color:var(--muted);box-shadow:var(--shadow);white-space:nowrap}
+.auth-chip strong{color:var(--text)}
+body.viewer-mode .admin-only{display:none!important}
+body.offline-db .db-only{display:none!important}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block}
+.sync-dot.warn{background:var(--orange)}
+.sync-dot.err{background:var(--red)}
+.login-note{font-size:.74rem;color:var(--muted);line-height:1.35;margin-bottom:12px}
+@media(max-width:900px){.auth-chip{justify-content:center}.topbar-actions .auth-chip{grid-column:1/-1}}
+
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+
+<!-- ══ SIDEBAR ══ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-icon"><i class="fa-solid fa-layer-group"></i></div>
+    <div>
+      <div class="sb-logo-text">Skill Up</div>
+      <div class="sb-logo-sub">Resource Mgr</div>
+    </div>
+  </div>
+  <div class="sb-section">Main</div>
+  <button class="nav-item active" onclick="switchTab('overview')"><i class="fa-solid fa-chart-pie"></i>Overview</button>
+  <button class="nav-item" onclick="switchTab('tracker')" id="nav-tracker"><i class="fa-solid fa-boxes-stacked"></i>Resource Tracker</button>
+  <button class="nav-item" onclick="switchTab('distribute')" id="nav-distribute"><i class="fa-solid fa-share-nodes"></i>Distribution</button>
+  <button class="nav-item" onclick="switchTab('returns')" id="nav-returns"><i class="fa-solid fa-rotate-left"></i>Returns</button>
+  <button class="nav-item" onclick="switchTab('requests')" id="nav-requests"><i class="fa-solid fa-file-signature"></i>Authority Requests</button>
+  <div class="sb-section">Tools</div>
+  <button class="nav-item" onclick="switchTab('activity')"><i class="fa-solid fa-clock-rotate-left"></i>Activity Log</button>
+  <button class="nav-item" onclick="switchTab('import')"><i class="fa-solid fa-file-import"></i>Import / Export</button>
+  <button class="nav-item" onclick="switchTab('reports')"><i class="fa-solid fa-chart-line"></i>Reports</button>
+  <button class="nav-item" onclick="switchTab('settings')"><i class="fa-solid fa-gear"></i>Settings</button>
+  <div class="sb-section">Config</div>
+  <button class="nav-item" onclick="switchTab('modules')"><i class="fa-solid fa-sitemap"></i>Manage Modules</button>
+  <div class="sb-bottom">
+    <button class="nav-item" onclick="exportAllXLSX()"><i class="fa-solid fa-download"></i>Export All (XLSX)</button>
+    <div class="sb-version">v2.1.0 · Skill Up Program</div>
+  </div>
+</aside>
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+<!-- ══ MAIN ══ -->
+<div class="main-area">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Open menu"><i class="fa-solid fa-bars"></i></button>
+      <div class="topbar-title" id="topbar-title"><i class="fa-solid fa-chart-pie"></i>Overview</div>
+    </div>
+    <div class="topbar-actions">
+      <span class="utility-pill desktop-only" id="save-status"><i class="fa-solid fa-cloud-check"></i><strong>Saved</strong></span>
+      <span class="auth-chip db-only" id="auth-status"><span class="sync-dot warn"></span><strong>View mode</strong></span>
+      <button class="btn btn-secondary db-only" id="auth-action-btn" onclick="openLoginModal()"><i class="fa-solid fa-right-to-bracket"></i>Admin Login</button>
+      <div class="search-wrap" id="global-search-wrap" style="display:none">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input class="search-input" id="global-search" placeholder="Search resources…" oninput="applySearch()">
+      </div>
+      <button class="btn btn-secondary" onclick="openModal('add-resource')"><i class="fa-solid fa-plus"></i>Add Resource</button>
+      <button class="btn btn-primary" onclick="openModal('new-request')"><i class="fa-solid fa-paper-plane"></i>New Request</button>
+      <button class="btn btn-secondary desktop-only" onclick="printCurrentReport()"><i class="fa-solid fa-print"></i>Print</button>
+    </div>
+  </div>
+  <div class="content" id="main-content">
+
+    <!-- ══ OVERVIEW ══ -->
+    <div id="tab-overview" class="page active">
+      <div class="utility-strip" id="smart-utility-strip"></div>
+      <div id="alerts-section"></div>
+      <div class="stats-row" id="global-stats"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+        <div class="table-card">
+          <div class="tc-header"><div class="tc-title"><i class="fa-solid fa-chart-bar"></i>Resource Flow by Module</div></div>
+          <div style="padding:14px 16px" id="overview-chart"></div>
+        </div>
+        <div class="table-card">
+          <div class="tc-header"><div class="tc-title"><i class="fa-solid fa-clock-rotate-left"></i>Recent Activity</div></div>
+          <div style="padding:8px 14px;max-height:220px;overflow-y:auto" id="recent-activity"></div>
+        </div>
+      </div>
+      <div class="sec-hdr"><div class="sec-title"><i class="fa-solid fa-table-columns"></i>All Modules</div><button class="btn btn-primary btn-sm" onclick="switchTab('modules')"><i class="fa-solid fa-plus"></i>Add Module</button></div>
+      <div class="module-grid" id="overview-grid"></div>
+    </div>
+
+    <!-- ══ TRACKER ══ -->
+    <div id="tab-tracker" class="page">
+      <div class="week-pills" id="tracker-pills"></div>
+      <div id="tracker-mod-banner"></div>
+      <div class="stats-row" id="tracker-stats"></div>
+      <div class="table-card desktop-table-on-mobile">
+        <div class="tc-header">
+          <div class="tc-title"><i class="fa-solid fa-list-check"></i><span id="tracker-table-title">Resources</span></div>
+          <div class="tc-actions">
+            <button class="btn btn-secondary btn-sm" onclick="openModal('import-simple')"><i class="fa-solid fa-file-import"></i>Import</button>
+            <button class="btn btn-primary btn-sm" onclick="openModal('add-resource')"><i class="fa-solid fa-plus"></i>Add Resource</button>
+          </div>
+        </div>
+        <div class="tc-filters" id="tracker-filters"></div>
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortTable('name')">Item <i class="fa-solid fa-sort"></i></th>
+              <th>Category</th>
+              <th>Requested By</th>
+              <th onclick="sortTable('qty_requested')">Req. <i class="fa-solid fa-sort"></i></th>
+              <th>Approved</th>
+              <th onclick="sortTable('qty_received')">Received <i class="fa-solid fa-sort"></i></th>
+              <th>Issued</th>
+              <th>Returned</th>
+              <th>Lost / Used</th>
+              <th>Net Remaining</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tracker-tbody"></tbody>
+        </table>
+        <div class="mobile-card-list" id="tracker-mobile-cards"></div>
+      </div>
+    </div>
+
+    <!-- ══ DISTRIBUTION ══ -->
+    <div id="tab-distribute" class="page">
+      <div class="info-row"><i class="fa-solid fa-circle-info"></i><span>Resources can be issued to <strong>any module</strong>, not just the requesting one. Choose recipient module when issuing.</span></div>
+      <div class="week-pills" id="dist-pills"></div>
+      <div id="dist-content"></div>
+    </div>
+
+    <!-- ══ RETURNS ══ -->
+    <div id="tab-returns" class="page">
+      <div class="week-pills" id="ret-pills"></div>
+      <div style="margin-bottom:12px;display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="openModal('log-return')"><i class="fa-solid fa-rotate-left"></i>Log Return</button>
+        <button class="btn btn-warning" onclick="openModal('log-writeoff')"><i class="fa-solid fa-triangle-exclamation"></i>Mark Lost / Write-off</button>
+      </div>
+      <div class="warn-row"><i class="fa-solid fa-triangle-exclamation"></i><span>Not all resources need to be returned. Consumables, lost or misused items should be marked via <strong>"Mark Lost / Write-off"</strong> instead of a return.</span></div>
+      <div class="table-card">
+        <div class="tc-header"><div class="tc-title"><i class="fa-solid fa-rotate-left"></i>Return &amp; Write-off Records</div></div>
+        <table>
+          <thead><tr><th>Date</th><th>Item</th><th>Type</th><th>Module / Person</th><th>Qty</th><th>Condition / Reason</th><th>Notes</th></tr></thead>
+          <tbody id="returns-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ REQUESTS ══ -->
+    <div id="tab-requests" class="page">
+      <div class="info-row"><i class="fa-solid fa-circle-info"></i><span>When you <strong>receive a resource in the Tracker</strong>, update the linked request here to <strong>Received</strong>. This tracks the full lifecycle from request → approval → delivery.</span></div>
+      <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openModal('new-request')"><i class="fa-solid fa-paper-plane"></i>New Request</button>
+      <button class="btn btn-secondary desktop-only" onclick="printCurrentReport()"><i class="fa-solid fa-print"></i>Print</button></div>
+      <div class="table-card">
+        <div class="tc-header"><div class="tc-title"><i class="fa-solid fa-file-signature"></i>Authority Requests</div></div>
+        <div class="tc-filters" id="req-filters"></div>
+        <table>
+          <thead><tr><th>Date</th><th>Module</th><th>Item</th><th>Qty Req.</th><th>Qty Approved</th><th>Qty Received</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="requests-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ ACTIVITY LOG ══ -->
+    <div id="tab-activity" class="page">
+      <div class="sec-hdr">
+        <div class="sec-title"><i class="fa-solid fa-clock-rotate-left"></i>Activity Log</div>
+        <button class="btn btn-danger btn-sm" onclick="clearLog()"><i class="fa-solid fa-trash"></i>Clear Log</button>
+      </div>
+      <div class="table-card">
+        <div class="tc-header"><div class="tc-title"><i class="fa-solid fa-list"></i>All Events</div></div>
+        <div style="max-height:520px;overflow-y:auto;padding:6px 14px" id="activity-log-list"></div>
+      </div>
+    </div>
+
+    <!-- ══ IMPORT / EXPORT ══ -->
+    <div id="tab-import" class="page">
+      <div class="sec-hdr"><div class="sec-title"><i class="fa-solid fa-file-import"></i>Import Resources from Excel / CSV</div></div>
+      <div class="quick-actions"><button class="btn btn-success" onclick="reloadPublicSpeakingSeed()"><i class="fa-solid fa-rotate"></i>Reload Public Speaking Excel Data</button><button class="btn btn-secondary" onclick="printCurrentReport()"><i class="fa-solid fa-print"></i>Print Current Report</button></div>
+      <div class="table-card" style="margin-bottom:16px">
+        <div class="tc-header"><div class="tc-title"><i class="fa-solid fa-upload"></i>Upload File</div></div>
+        <div style="padding:18px 20px">
+          <div class="info-row"><i class="fa-solid fa-circle-info"></i><span>Upload an <strong>.xlsx</strong> or <strong>.csv</strong> file. Required columns: <code style="background:var(--bg);padding:1px 5px;border-radius:3px">Item Name</code>, <code style="background:var(--bg);padding:1px 5px;border-radius:3px">Category</code>, <code style="background:var(--bg);padding:1px 5px;border-radius:3px">Qty Requested</code>. Optional: <code style="background:var(--bg);padding:1px 5px;border-radius:3px">Notes</code></span></div>
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-upload').click()" ondragover="e=>{e.preventDefault();this.classList.add('dragover')}" ondragleave="this.classList.remove('dragover')" ondrop="handleFileDrop(event)">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <p>Click to browse or drag &amp; drop</p>
+            <small>Supports .xlsx, .xls, .csv</small>
+          </div>
+          <input type="file" id="file-upload" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileUpload(event)">
+          <div id="import-module-sel" style="display:none;margin-top:14px">
+            <div class="form-group">
+              <label class="form-label">Assign to Module <span class="req">*</span></label>
+              <select id="import-module"></select>
+            </div>
+            <div id="import-preview"></div>
+            <div style="margin-top:10px">
+              <button class="btn btn-primary" onclick="confirmImport()"><i class="fa-solid fa-check"></i>Confirm Import</button>
+              <button class="btn btn-secondary" style="margin-left:6px" onclick="cancelImport()"><i class="fa-solid fa-xmark"></i>Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sec-hdr"><div class="sec-title"><i class="fa-solid fa-download"></i>Export Data</div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
+        <div class="table-card"><div style="padding:16px"><div style="font-weight:700;font-size:.84rem;margin-bottom:4px"><i class="fa-solid fa-boxes-stacked" style="color:var(--accent);margin-right:6px"></i>All Resources</div><div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">Export complete resource list with quantities</div><button class="btn btn-primary btn-sm" onclick="exportSheet('resources')"><i class="fa-solid fa-download"></i>Download XLSX</button></div></div>
+        <div class="table-card"><div style="padding:16px"><div style="font-weight:700;font-size:.84rem;margin-bottom:4px"><i class="fa-solid fa-share-nodes" style="color:var(--purple);margin-right:6px"></i>Distributions</div><div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">Who received what and when</div><button class="btn btn-primary btn-sm" onclick="exportSheet('distributions')"><i class="fa-solid fa-download"></i>Download XLSX</button></div></div>
+        <div class="table-card"><div style="padding:16px"><div style="font-weight:700;font-size:.84rem;margin-bottom:4px"><i class="fa-solid fa-rotate-left" style="color:var(--green);margin-right:6px"></i>Returns &amp; Write-offs</div><div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">Returns, losses and write-offs log</div><button class="btn btn-primary btn-sm" onclick="exportSheet('returns')"><i class="fa-solid fa-download"></i>Download XLSX</button></div></div>
+        <div class="table-card"><div style="padding:16px"><div style="font-weight:700;font-size:.84rem;margin-bottom:4px"><i class="fa-solid fa-file-signature" style="color:var(--orange);margin-right:6px"></i>Authority Requests</div><div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">All requests submitted to authority</div><button class="btn btn-primary btn-sm" onclick="exportSheet('requests')"><i class="fa-solid fa-download"></i>Download XLSX</button></div></div>
+        <div class="table-card"><div style="padding:16px"><div style="font-weight:700;font-size:.84rem;margin-bottom:4px"><i class="fa-solid fa-file-zipper" style="color:var(--cyan);margin-right:6px"></i>Full Export</div><div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">All data in a multi-sheet workbook</div><button class="btn btn-primary btn-sm" onclick="exportAllXLSX()"><i class="fa-solid fa-download"></i>Download XLSX</button></div></div>
+      </div>
+    </div>
+
+
+
+    <!-- ══ REPORTS ══ -->
+    <div id="tab-reports" class="page">
+      <div class="sec-hdr"><div class="sec-title"><i class="fa-solid fa-chart-line"></i>Smart Reports</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="copyReportSummary()"><i class="fa-solid fa-copy"></i>Copy Summary</button><button class="btn btn-primary btn-sm" onclick="printCurrentReport()"><i class="fa-solid fa-print"></i>Print Report</button></div></div>
+      <div id="reports-content"></div>
+    </div>
+
+    <!-- ══ SETTINGS ══ -->
+    <div id="tab-settings" class="page">
+      <div class="sec-hdr"><div class="sec-title"><i class="fa-solid fa-gear"></i>Settings & Data Safety</div></div>
+      <div class="setting-grid">
+        <div class="setting-card"><h3><i class="fa-solid fa-moon" style="color:var(--purple)"></i> Dark Mode</h3><p>Switch to a low-light interface. Your choice is saved on this device.</p><button class="btn btn-secondary" onclick="toggleDarkMode()"><i class="fa-solid fa-circle-half-stroke"></i>Toggle Dark Mode</button></div>
+        <div class="setting-card"><h3><i class="fa-solid fa-download" style="color:var(--green)"></i> Backup Data</h3><p>Download a JSON backup of modules, resources, requests, distributions, returns, and logs.</p><button class="btn btn-primary" onclick="backupJSON()"><i class="fa-solid fa-file-arrow-down"></i>Download Backup</button></div>
+        <div class="setting-card"><h3><i class="fa-solid fa-upload" style="color:var(--cyan)"></i> Restore Backup</h3><p>Restore a previously downloaded JSON backup. This replaces the current browser data.</p><input type="file" id="restore-json" accept=".json" style="display:none" onchange="restoreJSON(event)"><button class="btn btn-secondary" onclick="document.getElementById('restore-json').click()"><i class="fa-solid fa-file-arrow-up"></i>Restore JSON</button></div>
+        <div class="setting-card"><h3><i class="fa-solid fa-keyboard" style="color:var(--orange)"></i> Shortcuts</h3><p><strong>Ctrl/⌘ + K</strong> opens command search. <strong>Esc</strong> closes modals/menu. Use Tab for keyboard navigation.</p><button class="btn btn-secondary" onclick="openCommandPalette()"><i class="fa-solid fa-magnifying-glass"></i>Open Command Search</button></div>
+        <div class="setting-card danger-zone"><h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Reset Data</h3><p>Reset everything back to the Public Speaking Excel resources requested by Ms. Manika Budhathoki.</p><button class="btn btn-danger" onclick="reloadPublicSpeakingSeed()"><i class="fa-solid fa-rotate-left"></i>Reset to Seed Data</button></div>
+      </div>
+    </div>
+
+    <!-- ══ MODULES ══ -->
+    <div id="tab-modules" class="page">
+      <div class="sec-hdr">
+        <div class="sec-title"><i class="fa-solid fa-sitemap"></i>Manage Modules</div>
+        <button class="btn btn-primary" onclick="openModal('add-module')"><i class="fa-solid fa-plus"></i>Add Module</button>
+      </div>
+      <div id="modules-list"></div>
+    </div>
+
+  </div><!-- /.content -->
+</div><!-- /.main-area -->
+
+<!-- ═══════════ MODALS ═══════════ -->
+
+<!-- ADD/EDIT MODULE -->
+<div class="modal-overlay" id="modal-add-module">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-sitemap"></i><span id="am-title">Add Module</span></div><button class="close-btn" onclick="closeModal('add-module')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Module Name <span class="req">*</span></label><input type="text" id="am-name" placeholder="e.g. Public Speaking, Robotics, Cybersecurity"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Module Leader <span class="req">*</span></label><input type="text" id="am-leader" placeholder="Full name"></div>
+        <div class="form-group"><label class="form-label">Color Theme</label><select id="am-color"><option value="1">Blue</option><option value="2">Teal</option><option value="3">Purple</option><option value="4">Green</option><option value="5">Amber</option><option value="6">Pink</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Start Date <span class="req">*</span></label><input type="date" id="am-start"></div>
+        <div class="form-group"><label class="form-label">End Date <span class="req">*</span></label><input type="date" id="am-end"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Description</label><textarea id="am-desc" rows="2" placeholder="Short description of this module…"></textarea></div>
+      <input type="hidden" id="am-edit-idx">
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('add-module')">Cancel</button><button class="btn btn-primary" onclick="saveModule()"><i class="fa-solid fa-floppy-disk"></i>Save Module</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD RESOURCE -->
+<div class="modal-overlay" id="modal-add-resource">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-boxes-stacked"></i>Add Resource</div><button class="close-btn" onclick="closeModal('add-resource')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="info-row"><i class="fa-solid fa-circle-info"></i>Record a resource requested by a module. It can later be issued to any module during distribution.</div>
+      <div class="form-group"><label class="form-label">Requesting Module <span class="req">*</span></label><select id="ar-module"></select></div>
+      <div class="form-group"><label class="form-label">Item Name <span class="req">*</span></label><input type="text" id="ar-name" placeholder="e.g. Whiteboard Markers, Projector, Laptop"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Category</label><select id="ar-cat"><option>Stationery</option><option>Electronics</option><option>Printed Materials</option><option>Consumables</option><option>Equipment</option><option>Furniture</option><option>Other</option></select></div>
+        <div class="form-group"><label class="form-label">Qty Requested <span class="req">*</span></label><input type="number" id="ar-qty" min="1" value="1"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea id="ar-notes" rows="2" placeholder="Specifications, urgency, alternatives…"></textarea></div>
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('add-resource')">Cancel</button><button class="btn btn-primary" onclick="saveResource()"><i class="fa-solid fa-floppy-disk"></i>Save</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- UPDATE RESOURCE (received / approved) -->
+<div class="modal-overlay" id="modal-update-received">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-pen-to-square"></i>Update Resource</div><button class="close-btn" onclick="closeModal('update-received')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div id="ur-info" class="info-row"><i class="fa-solid fa-box"></i><span></span></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Qty Approved</label><input type="number" id="ur-approved" min="0"></div>
+        <div class="form-group"><label class="form-label">Qty Received</label><input type="number" id="ur-received" min="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Date Received</label><input type="date" id="ur-date"></div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select id="ur-status"><option value="pending">Pending</option><option value="approved">Approved</option><option value="received">Fully Received</option><option value="partial">Partially Received</option></select>
+        </div>
+      </div>
+      <hr class="form-divider">
+      <div class="info-row" style="font-size:.73rem"><i class="fa-solid fa-link"></i><span>Linked Authority Request (if any) will be updated automatically when you save.</span></div>
+      <div id="ur-linked-req" style="font-size:.79rem;color:var(--muted);margin-bottom:10px"></div>
+      <input type="hidden" id="ur-idx">
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('update-received')">Cancel</button><button class="btn btn-primary" onclick="saveReceived()"><i class="fa-solid fa-floppy-disk"></i>Update</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ISSUE RESOURCE -->
+<div class="modal-overlay" id="modal-issue">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-share-nodes"></i>Issue Resource</div><button class="close-btn" onclick="closeModal('issue')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div id="issue-info" class="info-row"><i class="fa-solid fa-box"></i><span></span></div>
+      <div class="form-group"><label class="form-label">Recipient Module <span class="req">*</span></label><select id="issue-to-module"><option value="">— Select module —</option></select><div class="form-hint"><i class="fa-solid fa-circle-info"></i>Can be different from the requesting module</div></div>
+      <div class="form-group"><label class="form-label">Issued To (Person / Group) <span class="req">*</span></label><input type="text" id="issue-to-person" placeholder="e.g. Mr. Rajan Thapa, Group B, Facilitators"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Qty to Issue <span class="req">*</span></label><input type="number" id="issue-qty" min="1" value="1"></div>
+        <div class="form-group"><label class="form-label">Date</label><input type="date" id="issue-date"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Expected Return?</label><select id="issue-expect-return"><option value="yes">Yes — expected back</option><option value="no">No — consumable / one-time use</option><option value="maybe">Possibly</option></select><div class="form-hint"><i class="fa-solid fa-circle-info"></i>Consumables won't be flagged as missing</div></div>
+      <div class="form-group"><label class="form-label">Notes</label><input type="text" id="issue-notes" placeholder="Optional context…"></div>
+      <input type="hidden" id="issue-idx">
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('issue')">Cancel</button><button class="btn btn-primary" onclick="saveIssue()"><i class="fa-solid fa-share"></i>Issue</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOG RETURN -->
+<div class="modal-overlay" id="modal-log-return">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-rotate-left"></i>Log Return</div><button class="close-btn" onclick="closeModal('log-return')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Resource Item <span class="req">*</span></label><select id="ret-resource"></select></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Qty Returned <span class="req">*</span></label><input type="number" id="ret-qty" min="1" value="1"></div>
+        <div class="form-group"><label class="form-label">Returned By <span class="req">*</span></label><input type="text" id="ret-by" placeholder="Name / Group"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Condition</label><select id="ret-cond"><option>Good</option><option>Minor Damage</option><option>Heavily Damaged</option><option>Needs Repair</option></select></div>
+        <div class="form-group"><label class="form-label">Date</label><input type="date" id="ret-date"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><input type="text" id="ret-notes" placeholder="Any remarks…"></div>
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('log-return')">Cancel</button><button class="btn btn-primary" onclick="saveReturn()"><i class="fa-solid fa-floppy-disk"></i>Log Return</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- WRITE-OFF / LOST / CONSUMED -->
+<div class="modal-overlay" id="modal-log-writeoff">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-triangle-exclamation"></i>Mark Lost / Write-off</div><button class="close-btn" onclick="closeModal('log-writeoff')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="warn-row"><i class="fa-solid fa-triangle-exclamation"></i>Use this for items that <strong>will not be returned</strong> — lost, consumed, damaged beyond use, or misused. This closes out the inventory for those items.</div>
+      <div class="form-group"><label class="form-label">Resource Item <span class="req">*</span></label><select id="wo-resource"></select></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Qty <span class="req">*</span></label><input type="number" id="wo-qty" min="1" value="1"></div>
+        <div class="form-group"><label class="form-label">Reason <span class="req">*</span></label>
+          <select id="wo-reason"><option value="lost">Lost</option><option value="consumed">Consumed / Used up</option><option value="damaged">Damaged beyond use</option><option value="misused">Misused</option><option value="expired">Expired</option><option value="other">Other</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Reported By</label><input type="text" id="wo-by" placeholder="Name / Group"></div>
+        <div class="form-group"><label class="form-label">Date</label><input type="date" id="wo-date"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><input type="text" id="wo-notes" placeholder="Describe what happened…"></div>
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('log-writeoff')">Cancel</button><button class="btn btn-warning" onclick="saveWriteoff()"><i class="fa-solid fa-triangle-exclamation"></i>Confirm Write-off</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- NEW REQUEST -->
+<div class="modal-overlay" id="modal-new-request">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-paper-plane"></i><span id="req-modal-title">New Authority Request</span></div><button class="close-btn" onclick="closeModal('new-request')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Module <span class="req">*</span></label><select id="req-module"></select></div>
+        <div class="form-group"><label class="form-label">Date <span class="req">*</span></label><input type="date" id="req-date"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Item Name <span class="req">*</span></label><input type="text" id="req-item" placeholder="Resource name"></div>
+        <div class="form-group"><label class="form-label">Qty Requested <span class="req">*</span></label><input type="number" id="req-qty" min="1" value="1"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Qty Approved</label><input type="number" id="req-approved" min="0" value="0"></div>
+        <div class="form-group"><label class="form-label">Qty Received</label><input type="number" id="req-received" min="0" value="0"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Reason / Justification</label><textarea id="req-reason" rows="2" placeholder="Why is this resource needed?"></textarea></div>
+      <div class="form-group"><label class="form-label">Status</label><select id="req-status"><option value="pending">Pending</option><option value="approved">Approved</option><option value="received">Fully Received</option><option value="partial">Partially Received</option></select></div>
+      <input type="hidden" id="req-edit-idx">
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('new-request')">Cancel</button><button class="btn btn-primary" onclick="saveRequest()"><i class="fa-solid fa-paper-plane"></i>Submit Request</button></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ADMIN LOGIN -->
+<div class="modal-overlay" id="modal-admin-login">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-lock"></i>Admin Login</div><button class="close-btn" onclick="closeModal('admin-login')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="login-note">Public visitors can view all resource data. Only the configured Supabase admin account can add, edit, delete, import, reset, or sync data.</div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" id="login-email" placeholder="admin@example.com"></div>
+      <div class="form-group"><label class="form-label">Password</label><input type="password" id="login-password" placeholder="Supabase password" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 11px;font-family:'Outfit',sans-serif;font-size:.83rem;outline:none"></div>
+      <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('admin-login')">Cancel</button><button class="btn btn-primary" onclick="adminLogin()"><i class="fa-solid fa-right-to-bracket"></i>Login</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="command-palette" id="command-palette" onclick="if(event.target===this)closeCommandPalette()"><div class="command-box"><input id="command-input" placeholder="Search actions, pages, resources…" oninput="renderCommandPalette()"><div class="command-list" id="command-list"></div></div></div>
+<button class="fab" onclick="toggleFabMenu()" title="Quick actions"><i class="fa-solid fa-bolt"></i></button>
+<div class="fab-menu" id="fab-menu"><button class="btn btn-secondary" onclick="openModal('add-resource');toggleFabMenu(false)"><i class="fa-solid fa-plus"></i>Add Resource</button><button class="btn btn-secondary" onclick="openModal('new-request');toggleFabMenu(false)"><i class="fa-solid fa-paper-plane"></i>New Request</button><button class="btn btn-secondary" onclick="openCommandPalette();toggleFabMenu(false)"><i class="fa-solid fa-magnifying-glass"></i>Search</button><button class="btn btn-secondary" onclick="backupJSON();toggleFabMenu(false)"><i class="fa-solid fa-download"></i>Backup</button></div>
+<div id="toast"><i class="fa-solid fa-circle-check" id="toast-icon"></i><span id="toast-msg">Saved</span></div>
+
+<script>
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+const DEFAULT_SEED_VERSION = 'public_speaking_excel_2026_04_28_v2';
+function defaultState() {
+  return {
+    seed_version: DEFAULT_SEED_VERSION,
+    modules: [{name:'Public Speaking',leader:'Ms. Manika Budhathoki',color:3,start:'2026-04-28',end:'2026-06-30',desc:'Resources requested for the Public Speaking module.'}],
+    resources: [
+      {module_idx:0,name:"Pen",category:"Stationery",qty_requested:30,qty_approved:30,qty_received:30,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"A4 Paper",category:"Stationery",qty_requested:500,qty_approved:500,qty_received:500,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Sticky Notes",category:"Stationery",qty_requested:5,qty_approved:5,qty_received:5,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Colour Pen",category:"Stationery",qty_requested:40,qty_approved:40,qty_received:48,notes:"Received more than requested.",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Rulers",category:"Stationery",qty_requested:5,qty_approved:5,qty_received:5,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Pencils",category:"Stationery",qty_requested:30,qty_approved:30,qty_received:38,notes:"Received more than requested.",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Eraser",category:"Stationery",qty_requested:5,qty_approved:5,qty_received:5,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Sharpner",category:"Stationery",qty_requested:5,qty_approved:5,qty_received:5,notes:"Spelling kept as provided in Excel.",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Scissors",category:"Stationery",qty_requested:5,qty_approved:5,qty_received:4,notes:"One item pending.",status:"partial",date_added:'2026-04-28'},
+      {module_idx:0,name:"Jar",category:"Equipment",qty_requested:1,qty_approved:1,qty_received:1,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Gift Box",category:"Other",qty_requested:30,qty_approved:30,qty_received:15,notes:"Partial received.",status:"partial",date_added:'2026-04-28'},
+      {module_idx:0,name:"Gift Wrapper",category:"Consumables",qty_requested:20,qty_approved:20,qty_received:20,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Clue card",category:"Printed Materials",qty_requested:30,qty_approved:30,qty_received:0,notes:"Requested but not received yet.",status:"pending",date_added:'2026-04-28'},
+      {module_idx:0,name:"Colourful Paper",category:"Consumables",qty_requested:250,qty_approved:250,qty_received:174,notes:"Breakdown received: Red(30), Orange(36), Yellow(18), Pink(30), Blue(30), Green(30).",status:"partial",date_added:'2026-04-28'},
+      {module_idx:0,name:"Black and White Worksheet",category:"Printed Materials",qty_requested:0,qty_approved:0,qty_received:0,notes:"Quantity not provided in Excel.",status:"pending",date_added:'2026-04-28'},
+      {module_idx:0,name:"Stickers",category:"Consumables",qty_requested:1,qty_approved:1,qty_received:0,notes:"Requested but not received yet.",status:"pending",date_added:'2026-04-28'},
+      {module_idx:0,name:"Ribbon",category:"Consumables",qty_requested:30,qty_approved:30,qty_received:0,notes:"Requested but not received yet.",status:"pending",date_added:'2026-04-28'},
+      {module_idx:0,name:"Tape",category:"Consumables",qty_requested:2,qty_approved:2,qty_received:2,notes:"",status:"received",date_added:'2026-04-28'},
+      {module_idx:0,name:"Bubble Wrapper",category:"Consumables",qty_requested:1,qty_approved:1,qty_received:0,notes:"Requested but not received yet.",status:"pending",date_added:'2026-04-28'}
+    ],
+    distributions: [],
+    returns: [],
+    requests: [
+      {module_idx:0,item:"Pen",qty:30,qty_approved:30,qty_received:30,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"A4 Paper",qty:500,qty_approved:500,qty_received:500,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Sticky Notes",qty:5,qty_approved:5,qty_received:5,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Colour Pen",qty:40,qty_approved:40,qty_received:48,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Rulers",qty:5,qty_approved:5,qty_received:5,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Pencils",qty:30,qty_approved:30,qty_received:38,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Eraser",qty:5,qty_approved:5,qty_received:5,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Sharpner",qty:5,qty_approved:5,qty_received:5,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Scissors",qty:5,qty_approved:5,qty_received:4,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"partial"},
+      {module_idx:0,item:"Jar",qty:1,qty_approved:1,qty_received:1,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Gift Box",qty:30,qty_approved:30,qty_received:15,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"partial"},
+      {module_idx:0,item:"Gift Wrapper",qty:20,qty_approved:20,qty_received:20,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Clue card",qty:30,qty_approved:30,qty_received:0,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"pending"},
+      {module_idx:0,item:"Colourful Paper",qty:250,qty_approved:250,qty_received:174,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"partial"},
+      {module_idx:0,item:"Black and White Worksheet",qty:0,qty_approved:0,qty_received:0,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"pending"},
+      {module_idx:0,item:"Stickers",qty:1,qty_approved:1,qty_received:0,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"pending"},
+      {module_idx:0,item:"Ribbon",qty:30,qty_approved:30,qty_received:0,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"pending"},
+      {module_idx:0,item:"Tape",qty:2,qty_approved:2,qty_received:2,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"received"},
+      {module_idx:0,item:"Bubble Wrapper",qty:1,qty_approved:1,qty_received:0,reason:'Requested by Ms. Manika Budhathoki for the Public Speaking module.',date:'2026-04-28',status:"pending"}
+    ],
+    log: [{type:'import',msg:'Preloaded <strong>19</strong> resources requested by <strong>Ms. Manika Budhathoki</strong> for <strong>Public Speaking</strong>.',color:'#2f9e44',time:new Date().toISOString()}]
+  };
+}
+let S = (() => {
+  try {
+    const s = localStorage.getItem('skillup_v3');
+    if (s) {
+      const parsed = JSON.parse(s);
+      if (parsed && (parsed.modules?.length || parsed.resources?.length)) return parsed;
+    }
+  } catch(e){}
+  return defaultState();
+})();
+
+// Supabase configuration
+// Paste your Project URL and Publishable key here before uploading to GitHub Pages.
+const SUPABASE_URL = "https://ecdeignuyvztzkmkipsl.supabase.co/rest/v1/";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U1FLkfOUbLKoibbjEgpe8w_AGj5itgY";
+const DB_ENABLED = SUPABASE_URL.startsWith('https://') && SUPABASE_PUBLISHABLE_KEY.startsWith('sb_');
+const sb = DB_ENABLED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
+let currentUser = null;
+let isAdmin = false;
+let isLoadingFromDb = false;
+let syncTimer = null;
+
+const save = () => {
+  localStorage.setItem('skillup_v3', JSON.stringify(S));
+  markSaved();
+  if (DB_ENABLED && isAdmin && !isLoadingFromDb) dbQueueSync();
+};
+
+// Color palette
+const CLR = {
+  1:{c:'#3b5bdb',bg:'#eef2ff'},2:{c:'#0c8599',bg:'#e3fafc'},3:{c:'#6741d9',bg:'#f3f0ff'},
+  4:{c:'#2f9e44',bg:'#ebfbee'},5:{c:'#e67700',bg:'#fff9db'},6:{c:'#c2255c',bg:'#fff0f6'}
+};
+const cl = m => CLR[m?.color||1] || CLR[1];
+
+// ═══════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════
+let activeTab = 'overview', activeMod = 0, sortKey = 'name', sortAsc = true, searchQ = '';
+
+
+function toggleSidebar(){
+  document.getElementById('sidebar')?.classList.toggle('open');
+  document.getElementById('sidebar-backdrop')?.classList.toggle('open');
+}
+function closeSidebar(){
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebar-backdrop')?.classList.remove('open');
+}
+function printCurrentReport(){ window.print(); }
+function reloadPublicSpeakingSeed(){
+  if(!confirm('This will replace current browser data with the Public Speaking Excel resources. Continue?')) return;
+  S = defaultState(); save(); activeMod=0; activeTab='overview'; switchTab('overview'); toast('Public Speaking resources reloaded');
+}
+
+const TAB_META = {
+  overview:['fa-chart-pie','Overview'],tracker:['fa-boxes-stacked','Resource Tracker'],
+  distribute:['fa-share-nodes','Distribution'],returns:['fa-rotate-left','Returns'],
+  requests:['fa-file-signature','Authority Requests'],activity:['fa-clock-rotate-left','Activity Log'],
+  import:['fa-file-import','Import / Export'],reports:['fa-chart-line','Reports'],settings:['fa-gear','Settings'],modules:['fa-sitemap','Manage Modules']
+};
+
+function switchTab(name) {
+  closeSidebar();
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${name}'`)) b.classList.add('active');
+  });
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  activeTab = name;
+  const [ic, tt] = TAB_META[name] || ['fa-circle','Page'];
+  document.getElementById('topbar-title').innerHTML = `<i class="fa-solid ${ic}"></i>${tt}`;
+  document.getElementById('global-search-wrap').style.display = name === 'tracker' ? '' : 'none';
+  searchQ = '';
+  if (document.getElementById('global-search')) document.getElementById('global-search').value = '';
+  render();
+}
+
+// ═══════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════
+const today = () => new Date().toISOString().split('T')[0];
+const fmtDate = d => { if(!d) return '—'; return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); };
+const modOpts = (sel) => S.modules.length ? S.modules.map((m,i)=>`<option value="${i}" ${i==sel?'selected':''}>${m.name} (${m.leader})</option>`).join('') : '<option>— Add a module first —</option>';
+
+function statusBadge(s) {
+  const mp = {
+    pending:['b-pending','fa-clock','Pending'],approved:['b-approved','fa-check','Approved'],
+    received:['b-received','fa-circle-check','Received'],partial:['b-partial','fa-circle-half-stroke','Partial'],
+    issued:['b-issued','fa-share','Issued'],closed:['b-closed','fa-lock','Closed'],
+    lost:['b-lost','fa-triangle-exclamation','Lost'],consumed:['b-consumed','fa-fire','Consumed']
+  };
+  const [cls,ic,lb] = mp[s] || mp.pending;
+  return `<span class="badge ${cls}"><i class="fa-solid ${ic}"></i>${lb}</span>`;
+}
+
+function sc(label, value, sub, icon, color, bg, statColor) {
+  return `<div class="stat-card" style="--stat-color:${statColor||color}">
+    <div class="stat-header"><div class="stat-label">${label}</div><div class="stat-icon" style="background:${bg};color:${color}"><i class="fa-solid ${icon}"></i></div></div>
+    <div class="stat-value" style="color:${color}">${value}</div>
+    <div class="stat-sub">${sub}</div></div>`;
+}
+
+function pillHtml(m, i, tab) {
+  const c = cl(m);
+  return `<button class="week-pill ${i===activeMod?'active':''}" style="--wc:${c.c};--wb:${c.bg}" onclick="setMod(${i},'${tab}')"><i class="fa-solid fa-chalkboard-teacher"></i>${m.name}</button>`;
+}
+
+function noModules() {
+  return `<div class="empty-state"><i class="fa-solid fa-sitemap"></i><p>No modules yet.</p><small>Go to Manage Modules to create your first module.</small><br><br><button class="btn btn-primary" style="margin-top:8px" onclick="switchTab('modules')"><i class="fa-solid fa-plus"></i>Add Module</button></div>`;
+}
+
+// Resource computed stats
+function resStats(gi) {
+  const issued = S.distributions.filter(d=>d.resource_idx===gi).reduce((s,d)=>s+d.qty,0);
+  const returned = S.returns.filter(r=>r.resource_idx===gi && r.type==='return').reduce((s,r)=>s+r.qty,0);
+  const lostUsed = S.returns.filter(r=>r.resource_idx===gi && r.type==='writeoff').reduce((s,r)=>s+r.qty,0);
+  const net = (S.resources[gi]?.qty_received||0) - issued + returned;
+  return {issued, returned, lostUsed, net};
+}
+
+// ═══════════════════════════════════════════
+// ACTIVITY LOG
+// ═══════════════════════════════════════════
+function logEvent(type, msg, color) {
+  S.log.unshift({ type, msg, color: color||'#3b5bdb', time: new Date().toISOString() });
+  if (S.log.length > 300) S.log = S.log.slice(0,200);
+  save();
+  updateNavBadges();
+}
+
+function updateNavBadges() {
+  const pending = S.requests.filter(r=>r.status==='pending').length;
+  document.querySelectorAll('.nav-badge').forEach(b=>b.remove());
+  if (pending > 0) {
+    const navReq = document.getElementById('nav-requests');
+    if(navReq){ const b=document.createElement('span'); b.className='nav-badge'; b.textContent=pending; navReq.appendChild(b); }
+  }
+}
+
+// ═══════════════════════════════════════════
+// MAIN RENDER
+// ═══════════════════════════════════════════
+function render() {
+  updateNavBadges();
+  if (activeTab==='overview')  renderOverview();
+  if (activeTab==='tracker')   renderTracker();
+  if (activeTab==='distribute') renderDistribute();
+  if (activeTab==='returns')   renderReturns();
+  if (activeTab==='requests')  renderRequests();
+  if (activeTab==='activity')  renderActivity();
+  if (activeTab==='reports')   renderReports();
+  if (activeTab==='settings')  renderSettings();
+  if (activeTab==='modules')   renderModules();
+  if (activeTab==='import')    { renderImportModule(); }
+}
+
+// ═══════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════
+function renderOverview() {
+  renderUtilityStrip();
+  const tR=S.resources.length;
+  const tReq=S.resources.reduce((s,r)=>s+r.qty_requested,0);
+  const tRec=S.resources.reduce((s,r)=>s+r.qty_received,0);
+  const tIss=S.distributions.reduce((s,d)=>s+d.qty,0);
+  const tRet=S.returns.filter(r=>r.type==='return').reduce((s,r)=>s+r.qty,0);
+  const tLost=S.returns.filter(r=>r.type==='writeoff').reduce((s,r)=>s+r.qty,0);
+
+  document.getElementById('global-stats').innerHTML =
+    sc('Modules',S.modules.length,'total configured','fa-sitemap','#3b5bdb','#eef2ff','#3b5bdb')+
+    sc('Resources',tR,'items tracked','fa-boxes-stacked','#6741d9','#f3f0ff','#6741d9')+
+    sc('Received',tRec,`of ${tReq} requested`,'fa-inbox','#2f9e44','#ebfbee','#2f9e44')+
+    sc('Issued Out',tIss,'items distributed','fa-share-nodes','#0c8599','#e3fafc','#0c8599')+
+    sc('Returned',tRet,'back to stock','fa-rotate-left','#3b5bdb','#eef2ff','#3b5bdb')+
+    sc('Lost / Used',tLost,'write-offs','fa-triangle-exclamation','#c92a2a','#fff5f5','#c92a2a');
+
+  // Alerts
+  let alerts = [];
+  S.requests.filter(r=>r.status==='pending').forEach(r=>{ alerts.push(`<div class="alert-card alert-warn"><i class="fa-solid fa-clock"></i><div>Authority request pending: <strong>${r.item}</strong> for <strong>${S.modules[r.module_idx]?.name||'—'}</strong> (${r.qty} units)</div></div>`); });
+  const lowStock = S.resources.filter((_,gi)=>{ const st=resStats(gi); return st.net<=0 && S.resources[gi].qty_received>0; });
+  lowStock.forEach(r=>{ alerts.push(`<div class="alert-card alert-danger"><i class="fa-solid fa-triangle-exclamation"></i><div>Stock depleted: <strong>${r.name}</strong> — no units remaining</div></div>`); });
+  document.getElementById('alerts-section').innerHTML = alerts.length ? `<div style="margin-bottom:14px">${alerts.slice(0,4).join('')}${alerts.length>4?`<div style="font-size:.74rem;color:var(--muted);margin-top:4px"><i class="fa-solid fa-ellipsis"></i> +${alerts.length-4} more alerts</div>`:''}</div>` : '';
+
+  // Mini chart
+  if (S.modules.length) {
+    const maxV = Math.max(...S.modules.map((_,mi)=>{ return S.resources.filter(r=>r.module_idx===mi).reduce((s,r)=>s+r.qty_received,0)||1; }),1);
+    document.getElementById('overview-chart').innerHTML = `<div class="chart-bar-wrap">${S.modules.map((m,mi)=>{
+      const rec=S.resources.filter(r=>r.module_idx===mi).reduce((s,r)=>s+r.qty_received,0);
+      const iss=S.distributions.filter(d=>d.resource_module_idx===mi).reduce((s,d)=>s+d.qty,0);
+      const h=Math.round((rec/maxV)*68);
+      const c=cl(m);
+      return `<div class="chart-bar-col"><div class="chart-bar-num">${rec}</div><div class="chart-bar" style="height:${h}px;background:${c.c};opacity:.85" title="${m.name}: ${rec} received, ${iss} issued"></div><div class="chart-bar-lbl">${m.name.substring(0,8)}</div></div>`;
+    }).join('')}</div>`;
+  } else {
+    document.getElementById('overview-chart').innerHTML = '<div class="empty-state" style="padding:20px"><i class="fa-solid fa-chart-bar"></i><p>No data yet</p></div>';
+  }
+
+  // Recent activity
+  document.getElementById('recent-activity').innerHTML = S.log.length ? S.log.slice(0,10).map(l=>`
+    <div class="activity-item">
+      <div class="activity-dot" style="background:${l.color}"></div>
+      <div class="activity-text">${l.msg}</div>
+      <div class="activity-time">${new Date(l.time).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
+    </div>`) .join('') : '<div class="empty-state" style="padding:20px"><i class="fa-solid fa-inbox"></i><p>No activity yet</p></div>';
+
+  // Module grid
+  if (!S.modules.length) { document.getElementById('overview-grid').innerHTML=`<div style="grid-column:1/-1">${noModules()}</div>`; return; }
+  document.getElementById('overview-grid').innerHTML = S.modules.map((m,mi)=>{
+    const c=cl(m);
+    const mRes=S.resources.filter(r=>r.module_idx===mi);
+    const mIss=S.distributions.filter(d=>d.to_module_idx===mi).reduce((s,d)=>s+d.qty,0);
+    const mRet=S.returns.filter(r=>r.type==='return'&&S.resources[r.resource_idx]?.module_idx===mi).reduce((s,r)=>s+r.qty,0);
+    return `<div class="module-card" style="--mc:${c.c}" onclick="goToModule(${mi})">
+      <div class="mc-top">
+        <div><div class="mc-num">Module ${mi+1}</div><div class="mc-name">${m.name}</div>
+          <div class="mc-meta"><i class="fa-solid fa-user-tie"></i>${m.leader}</div>
+          <div class="mc-meta"><i class="fa-regular fa-calendar"></i>${fmtDate(m.start)} — ${fmtDate(m.end)}</div>
+        </div>
+        <div class="mc-icon" style="background:${c.bg};color:${c.c}"><i class="fa-solid fa-chalkboard-teacher"></i></div>
+      </div>
+      <div class="mc-stats">
+        <div><div class="mc-stat-num" style="color:${c.c}">${mRes.length}</div><div class="mc-stat-lbl">Items</div></div>
+        <div><div class="mc-stat-num" style="color:var(--green)">${mRes.reduce((s,r)=>s+r.qty_received,0)}</div><div class="mc-stat-lbl">Received</div></div>
+        <div><div class="mc-stat-num" style="color:var(--cyan)">${mIss}</div><div class="mc-stat-lbl">Issued To</div></div>
+        <div><div class="mc-stat-num" style="color:var(--orange)">${mRet}</div><div class="mc-stat-lbl">Returned</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function goToModule(idx) { activeMod=idx; switchTab('tracker'); }
+
+// ═══════════════════════════════════════════
+// TRACKER
+// ═══════════════════════════════════════════
+function renderTracker() {
+  if (!S.modules.length) { document.getElementById('tracker-pills').innerHTML=''; document.getElementById('tracker-mod-banner').innerHTML=''; document.getElementById('tracker-stats').innerHTML=''; document.getElementById('tracker-tbody').innerHTML=`<tr><td colspan="12">${noModules()}</td></tr>`; return; }
+  if (activeMod>=S.modules.length) activeMod=0;
+  document.getElementById('tracker-pills').innerHTML = S.modules.map((m,i)=>pillHtml(m,i,'tracker')).join('');
+  const m=S.modules[activeMod]; const c=cl(m);
+  document.getElementById('tracker-mod-banner').innerHTML=`<div class="mod-banner" style="background:${c.bg};border-color:${c.c}33;--bc:${c.c}33"><div class="mod-banner-dot" style="background:${c.c};box-shadow:0 0 7px ${c.c}88"></div><div><div class="mod-banner-name">Module ${activeMod+1} — ${m.name}</div><div class="mod-banner-meta"><span><i class="fa-solid fa-user-tie"></i>${m.leader}</span><span><i class="fa-regular fa-calendar"></i>${fmtDate(m.start)} — ${fmtDate(m.end)}</span>${m.desc?`<span><i class="fa-solid fa-info-circle"></i>${m.desc}</span>`:''}</div></div></div>`;
+
+  let mRes = S.resources.map((r,gi)=>({r,gi})).filter(({r})=>r.module_idx===activeMod);
+
+  // Search filter
+  if (searchQ) mRes = mRes.filter(({r})=>r.name.toLowerCase().includes(searchQ)||r.category.toLowerCase().includes(searchQ));
+
+  // Sort
+  mRes.sort((a,b)=>{
+    let va=a.r[sortKey]||'', vb=b.r[sortKey]||'';
+    if (typeof va==='string') va=va.toLowerCase(), vb=vb.toLowerCase();
+    return sortAsc ? (va>vb?1:va<vb?-1:0) : (va<vb?1:va>vb?-1:0);
+  });
+
+  const allRes = S.resources.filter(r=>r.module_idx===activeMod);
+  const tReq=allRes.reduce((s,r)=>s+r.qty_requested,0), tRec=allRes.reduce((s,r)=>s+r.qty_received,0);
+  const tIss=S.distributions.filter(d=>d.resource_module_idx===activeMod).reduce((s,d)=>s+d.qty,0);
+  const tRet=S.returns.filter(r=>r.type==='return'&&S.resources[r.resource_idx]?.module_idx===activeMod).reduce((s,r)=>s+r.qty,0);
+  const tLost=S.returns.filter(r=>r.type==='writeoff'&&S.resources[r.resource_idx]?.module_idx===activeMod).reduce((s,r)=>s+r.qty,0);
+
+  document.getElementById('tracker-stats').innerHTML =
+    sc('Items',allRes.length,'entries','fa-list',c.c,c.bg,c.c)+
+    sc('Requested',tReq,'from authority','fa-file-circle-plus','#e67700','#fff9db','#e67700')+
+    sc('Received',tRec,'in hand','fa-inbox','#2f9e44','#ebfbee','#2f9e44')+
+    sc('Issued Out',tIss,'given out','fa-share-nodes','#0c8599','#e3fafc','#0c8599')+
+    sc('Returned',tRet,'back','fa-rotate-left','#6741d9','#f3f0ff','#6741d9')+
+    sc('Lost/Used',tLost,'written off','fa-triangle-exclamation','#c92a2a','#fff5f5','#c92a2a');
+
+  document.getElementById('tracker-table-title').textContent = `${m.name} — Resources`;
+
+  // Status filter chips
+  document.getElementById('tracker-filters').innerHTML = `
+    <span style="font-size:.68rem;color:var(--muted);font-weight:600">Filter:</span>
+    ${['all','pending','approved','received','partial'].map(s=>`<span class="filter-chip ${activeStatusFilter===s?'active':''}" onclick="setStatusFilter('${s}')">${s==='all'?'All':s.charAt(0).toUpperCase()+s.slice(1)}</span>`).join('')}
+    ${searchQ?`<span style="font-size:.68rem;color:var(--accent);font-weight:600"><i class="fa-solid fa-magnifying-glass"></i> "${searchQ}"</span>`:''}`;
+
+  let filtered = mRes;
+  if (activeStatusFilter && activeStatusFilter!=='all') filtered = mRes.filter(({r})=>r.status===activeStatusFilter);
+  renderTrackerMobileCards(filtered);
+
+  const tbody = document.getElementById('tracker-tbody');
+  if (!filtered.length) { tbody.innerHTML=`<tr><td colspan="12"><div class="empty-state"><i class="fa-solid fa-box-open"></i><p>${allRes.length?'No results match filter.':'No resources for this module.'}</p><small>Click "+ Add Resource" to get started.</small></div></td></tr>`; return; }
+
+  tbody.innerHTML = filtered.map(({r, gi})=>{
+    const st=resStats(gi);
+    const netColor=st.net<0?'var(--red)':st.net===0&&r.qty_received>0?'var(--orange)':'var(--green)';
+    const retPct=st.issued>0?Math.min(100,Math.round(st.returned/st.issued*100)):0;
+    return `<tr>
+      <td><strong>${r.name}</strong>${r.notes?`<div style="font-size:.68rem;color:var(--muted);margin-top:1px">${r.notes.substring(0,40)}${r.notes.length>40?'…':''}</div>`:''}  </td>
+      <td><span class="cat-tag">${r.category}</span></td>
+      <td style="font-size:.72rem;color:var(--muted)"><i class="fa-solid fa-user-tie" style="margin-right:3px"></i>${S.modules[r.module_idx]?.leader||'—'}</td>
+      <td class="td-mono">${r.qty_requested}</td>
+      <td class="td-mono">${r.qty_approved||'—'}</td>
+      <td class="td-mono"><span style="color:var(--green);font-weight:700">${r.qty_received}</span></td>
+      <td class="td-mono">${st.issued}</td>
+      <td class="td-mono">${st.returned}${st.issued>0?`<div class="prog-wrap"><div class="prog-fill" style="width:${retPct}%;background:var(--green)"></div></div>`:''}</td>
+      <td class="td-mono"><span style="color:${st.lostUsed>0?'var(--red)':'var(--muted-light)'};font-weight:${st.lostUsed>0?700:400}">${st.lostUsed||'—'}</span></td>
+      <td class="td-mono"><span style="color:${netColor};font-weight:700">${st.net}</span></td>
+      <td>${statusBadge(r.status)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary btn-sm btn-icon" title="Update received" onclick="openUpdateReceived(${gi})"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn btn-secondary btn-sm btn-icon" title="Issue out" onclick="openIssue(${gi})" ${r.qty_received<=0?'disabled':''}><i class="fa-solid fa-share"></i></button>
+        <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="deleteResource(${gi})"><i class="fa-solid fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+let activeStatusFilter = 'all';
+function setStatusFilter(f) { activeStatusFilter=f; renderTracker(); }
+function sortTable(key) { if(sortKey===key) sortAsc=!sortAsc; else{sortKey=key;sortAsc=true;} renderTracker(); }
+function setMod(idx) { activeMod=idx; render(); }
+function applySearch() { searchQ=document.getElementById('global-search').value.toLowerCase(); renderTracker(); }
+
+// ═══════════════════════════════════════════
+// DISTRIBUTE
+// ═══════════════════════════════════════════
+function renderDistribute() {
+  if (!S.modules.length) { document.getElementById('dist-pills').innerHTML=''; document.getElementById('dist-content').innerHTML=noModules(); return; }
+  if (activeMod>=S.modules.length) activeMod=0;
+  document.getElementById('dist-pills').innerHTML = S.modules.map((m,i)=>pillHtml(m,i,'distribute')).join('');
+  const m=S.modules[activeMod]; const c=cl(m);
+  const mRes=S.resources.map((r,gi)=>({r,gi})).filter(({r})=>r.module_idx===activeMod&&r.qty_received>0);
+  const dHist=S.distributions.filter(d=>d.resource_module_idx===activeMod);
+
+  const stockRows=mRes.length?mRes.map(({r,gi})=>{
+    const st=resStats(gi);
+    const avail=st.net;
+    return `<tr><td><strong>${r.name}</strong><div style="font-size:.68rem;color:var(--muted)">${r.category}</div></td><td class="td-mono">${r.qty_received}</td><td class="td-mono">${st.issued}</td><td class="td-mono">${st.returned}</td><td class="td-mono">${st.lostUsed||'—'}</td><td class="td-mono"><strong style="color:${avail>0?'var(--green)':avail<0?'var(--red)':'var(--orange)'}">${avail}</strong></td><td><button class="btn btn-primary btn-sm" onclick="openIssue(${gi})" ${avail<=0?'disabled':''}><i class="fa-solid fa-share"></i>Issue</button></td></tr>`;
+  }).join('') : `<tr><td colspan="7"><div class="empty-state" style="padding:20px"><i class="fa-solid fa-box-open"></i><p>No received resources. Mark items as received in Tracker first.</p></div></td></tr>`;
+
+  const histRows=dHist.length?dHist.map(d=>{
+    const rm=S.modules[d.to_module_idx]; const rc=rm?cl(rm):null;
+    return `<tr><td>${d.date}</td><td><strong>${S.resources[d.resource_idx]?.name||'—'}</strong></td><td>${rm?`<span class="badge" style="background:${rc.bg};color:${rc.c}">${rm.name}</span>`:'<span class="badge b-neutral">—</span>'}</td><td>${d.issued_to}</td><td class="td-mono">${d.qty}</td><td>${d.expect_return==='no'?'<span class="badge b-consumed">Consumable</span>':d.expect_return==='maybe'?'<span class="badge b-partial">Maybe</span>':'<span class="badge b-received">Expected back</span>'}</td><td>${d.notes||'—'}</td></tr>`;
+  }).join('') : `<tr><td colspan="7"><div class="empty-state" style="padding:16px"><i class="fa-solid fa-inbox"></i><p>No distributions yet.</p></div></td></tr>`;
+
+  document.getElementById('dist-content').innerHTML=`
+    <div class="table-card" style="margin-bottom:16px"><div class="tc-header"><div class="tc-title"><i class="fa-solid fa-boxes-stacked"></i>Stock — ${m.name}</div></div>
+    <table><thead><tr><th>Item</th><th>Received</th><th>Issued</th><th>Returned</th><th>Lost/Used</th><th>Net Available</th><th>Action</th></tr></thead><tbody>${stockRows}</tbody></table></div>
+    <div class="table-card"><div class="tc-header"><div class="tc-title"><i class="fa-solid fa-clock-rotate-left"></i>Distribution History — ${m.name} resources</div></div>
+    <table><thead><tr><th>Date</th><th>Item</th><th>Recipient Module</th><th>Issued To</th><th>Qty</th><th>Return Expected?</th><th>Notes</th></tr></thead><tbody>${histRows}</tbody></table></div>`;
+}
+
+// ═══════════════════════════════════════════
+// RETURNS
+// ═══════════════════════════════════════════
+function renderReturns() {
+  if (!S.modules.length) { document.getElementById('ret-pills').innerHTML=''; document.getElementById('returns-tbody').innerHTML=`<tr><td colspan="7">${noModules()}</td></tr>`; return; }
+  if (activeMod>=S.modules.length) activeMod=0;
+  document.getElementById('ret-pills').innerHTML = S.modules.map((m,i)=>pillHtml(m,i,'returns')).join('');
+  const wRet=S.returns.filter(r=>S.resources[r.resource_idx]?.module_idx===activeMod);
+  const tbody=document.getElementById('returns-tbody');
+  if (!wRet.length) { tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><i class="fa-solid fa-rotate-left"></i><p>No returns or write-offs for this module.</p></div></td></tr>`; return; }
+  const condColor={'Good':'b-received','Minor Damage':'b-partial','Heavily Damaged':'b-lost','Needs Repair':'b-pending'};
+  const woReasonColor={'lost':'b-lost','consumed':'b-consumed','damaged':'b-lost','misused':'b-pending','expired':'b-pending','other':'b-neutral'};
+  tbody.innerHTML=wRet.map(r=>{
+    const isWO=r.type==='writeoff';
+    return `<tr style="${isWO?'background:#fff5f5':''}">
+      <td>${r.date}</td>
+      <td><strong>${S.resources[r.resource_idx]?.name||'—'}</strong></td>
+      <td>${isWO?`<span class="badge b-lost"><i class="fa-solid fa-triangle-exclamation"></i>Write-off</span>`:`<span class="badge b-received"><i class="fa-solid fa-rotate-left"></i>Return</span>`}</td>
+      <td>${r.returned_by||r.reported_by||'—'}</td>
+      <td class="td-mono">${r.qty}</td>
+      <td>${isWO?`<span class="badge ${woReasonColor[r.reason]||'b-neutral'}">${r.reason}</span>`:`<span class="badge ${condColor[r.condition]||'b-neutral'}">${r.condition}</span>`}</td>
+      <td style="font-size:.75rem">${r.notes||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+// REQUESTS
+// ═══════════════════════════════════════════
+function renderRequests() {
+  const tbody=document.getElementById('requests-tbody');
+  document.getElementById('req-filters').innerHTML = `<span style="font-size:.68rem;color:var(--muted);font-weight:600">Filter:</span>${['all','pending','approved','received','partial'].map(s=>`<span class="filter-chip ${activeReqFilter===s?'active':''}" onclick="setReqFilter('${s}')">${s==='all'?'All':s.charAt(0).toUpperCase()+s.slice(1)}</span>`).join('')}`;
+
+  let reqs = S.requests.map((r,i)=>({r,i}));
+  if (activeReqFilter && activeReqFilter!=='all') reqs=reqs.filter(({r})=>r.status===activeReqFilter);
+
+  if (!reqs.length) { tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><i class="fa-solid fa-file-signature"></i><p>No requests${activeReqFilter!=='all'?' with this status':' submitted yet'}.</p></div></td></tr>`; return; }
+
+  tbody.innerHTML=reqs.map(({r,i})=>{
+    const m=S.modules[r.module_idx];
+    // Find linked resource
+    const linkedRes=S.resources.find(res=>res.module_idx===r.module_idx&&res.name.toLowerCase()===r.item.toLowerCase());
+    const hasLinked=!!linkedRes;
+    return `<tr>
+      <td>${r.date}</td>
+      <td>${m?m.name:'—'}</td>
+      <td><strong>${r.item}</strong>${hasLinked?`<div style="font-size:.67rem;color:var(--green);margin-top:1px"><i class="fa-solid fa-link"></i> Linked to Tracker</div>`:`<div style="font-size:.67rem;color:var(--muted-light);margin-top:1px"><i class="fa-solid fa-link-slash"></i> Not in Tracker</div>`}</td>
+      <td class="td-mono">${r.qty}</td>
+      <td class="td-mono">${r.qty_approved||'—'}</td>
+      <td class="td-mono"><span style="color:${r.qty_received>0?'var(--green)':'inherit'};font-weight:${r.qty_received>0?700:400}">${r.qty_received||'—'}</span></td>
+      <td style="font-size:.75rem;max-width:150px">${r.reason||'—'}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary btn-sm btn-icon" title="Edit" onclick="editRequest(${i})"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="deleteRequest(${i})"><i class="fa-solid fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+let activeReqFilter = 'all';
+function setReqFilter(f) { activeReqFilter=f; renderRequests(); }
+
+// ═══════════════════════════════════════════
+// ACTIVITY LOG
+// ═══════════════════════════════════════════
+function renderActivity() {
+  document.getElementById('activity-log-list').innerHTML = S.log.length ? S.log.map(l=>`
+    <div class="activity-item">
+      <div class="activity-dot" style="background:${l.color}"></div>
+      <div class="activity-text">${l.msg}</div>
+      <div class="activity-time">${new Date(l.time).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`) .join('') : '<div class="empty-state"><i class="fa-solid fa-clock-rotate-left"></i><p>No activity recorded yet.</p></div>';
+}
+function clearLog() {
+  if(!guardAdmin()) return; if(confirm('Clear entire activity log?')){S.log=[];save();renderActivity();} }
+
+// ═══════════════════════════════════════════
+// MODULES SETTINGS
+// ═══════════════════════════════════════════
+function renderModules() {
+  const list=document.getElementById('modules-list');
+  if (!S.modules.length) { list.innerHTML=`<div class="empty-state"><i class="fa-solid fa-sitemap"></i><p>No modules yet.</p></div>`; return; }
+  list.innerHTML=S.modules.map((m,i)=>{
+    const c=cl(m);
+    return `<div class="setup-card"><div style="width:4px;height:46px;border-radius:99px;background:${c.c};margin-right:13px;flex-shrink:0"></div>
+      <div class="setup-card-left"><div class="setup-card-label">Module ${i+1}</div><div class="setup-card-name">${m.name}</div>
+        <div class="setup-card-meta"><span><i class="fa-solid fa-user-tie"></i>${m.leader}</span><span><i class="fa-regular fa-calendar"></i>${fmtDate(m.start)} — ${fmtDate(m.end)}</span>${m.desc?`<span><i class="fa-solid fa-info-circle"></i>${m.desc}</span>`:''}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" onclick="editModule(${i})"><i class="fa-solid fa-pen"></i>Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteModule(${i})"><i class="fa-solid fa-trash"></i>Delete</button>
+      </div></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+// IMPORT MODULE SELECTOR
+// ═══════════════════════════════════════════
+function renderImportModule() {
+  document.getElementById('import-module').innerHTML = modOpts(activeMod);
+}
+
+// ═══════════════════════════════════════════
+// MODALS
+// ═══════════════════════════════════════════
+function openModal(name) {
+  document.getElementById('modal-'+name).classList.add('open');
+  if (name==='add-module') { document.getElementById('am-title').textContent='Add Module'; ['am-name','am-leader','am-desc'].forEach(id=>document.getElementById(id).value=''); document.getElementById('am-start').value=''; document.getElementById('am-end').value=''; document.getElementById('am-color').value='1'; document.getElementById('am-edit-idx').value=''; }
+  if (name==='add-resource') { document.getElementById('ar-module').innerHTML=modOpts(activeMod); document.getElementById('ar-name').value=''; document.getElementById('ar-notes').value=''; document.getElementById('ar-qty').value='1'; }
+  if (name==='log-return') { document.getElementById('ret-date').value=today(); populateIssuedItems('ret'); }
+  if (name==='log-writeoff') { document.getElementById('wo-date').value=today(); document.getElementById('wo-by').value=''; document.getElementById('wo-notes').value=''; document.getElementById('wo-qty').value='1'; populateIssuedItems('wo'); }
+  if (name==='new-request') { document.getElementById('req-modal-title').textContent='New Authority Request'; document.getElementById('req-date').value=today(); document.getElementById('req-module').innerHTML=modOpts(activeMod); document.getElementById('req-item').value=''; document.getElementById('req-reason').value=''; document.getElementById('req-qty').value='1'; document.getElementById('req-approved').value='0'; document.getElementById('req-received').value='0'; document.getElementById('req-status').value='pending'; document.getElementById('req-edit-idx').value=''; }
+  if (name==='issue') { document.getElementById('issue-date').value=today(); }
+}
+function closeModal(name) { document.getElementById('modal-'+name).classList.remove('open'); }
+
+function populateIssuedItems(prefix) {
+  const sel=document.getElementById(prefix+'-resource');
+  const items=S.resources.map((r,i)=>({r,i})).filter(({i})=>S.distributions.some(d=>d.resource_idx===i));
+  sel.innerHTML=items.length?items.map(({r,i})=>`<option value="${i}">${r.name} (${S.modules[r.module_idx]?.name||'?'})</option>`).join(''):'<option value="">— No issued resources found —</option>';
+}
+
+// ═══════════════════════════════════════════
+// MODULE CRUD
+// ═══════════════════════════════════════════
+function saveModule() {
+  if(!guardAdmin()) return;
+  const name=document.getElementById('am-name').value.trim(), leader=document.getElementById('am-leader').value.trim(), start=document.getElementById('am-start').value, end=document.getElementById('am-end').value;
+  if (!name||!leader||!start||!end) { toast('Please fill all required fields','error'); return; }
+  const mod={name,leader,start,end,desc:document.getElementById('am-desc').value,color:document.getElementById('am-color').value};
+  const ei=document.getElementById('am-edit-idx').value;
+  if (ei!=='') { S.modules[parseInt(ei)]=mod; logEvent('module',`Module updated: <strong>${name}</strong>`,'#2f9e44'); toast('Module updated!'); }
+  else { S.modules.push(mod); logEvent('module',`Module created: <strong>${name}</strong> (${leader})`,'#3b5bdb'); toast('Module added!'); }
+  save(); closeModal('add-module'); render();
+}
+function editModule(i) {
+  if(!guardAdmin()) return;
+  const m=S.modules[i]; document.getElementById('am-title').textContent='Edit Module'; document.getElementById('am-name').value=m.name; document.getElementById('am-leader').value=m.leader; document.getElementById('am-start').value=m.start; document.getElementById('am-end').value=m.end; document.getElementById('am-desc').value=m.desc||''; document.getElementById('am-color').value=m.color||'1'; document.getElementById('am-edit-idx').value=i;
+  document.getElementById('modal-add-module').classList.add('open');
+}
+function deleteModule(i) {
+  if(!guardAdmin()) return;
+  if (!confirm(`Delete module "${S.modules[i].name}"? All associated data will be removed.`)) return;
+  const name=S.modules[i].name; S.modules.splice(i,1);
+  S.resources=S.resources.filter(r=>r.module_idx!==i).map(r=>({...r,module_idx:r.module_idx>i?r.module_idx-1:r.module_idx}));
+  S.distributions=S.distributions.filter(d=>d.resource_module_idx!==i&&d.to_module_idx!==i);
+  S.returns=S.returns.filter(r=>S.resources[r.resource_idx]); S.requests=S.requests.filter(r=>r.module_idx!==i);
+  if (activeMod>=S.modules.length) activeMod=Math.max(0,S.modules.length-1);
+  logEvent('module',`Module deleted: <strong>${name}</strong>`,'#c92a2a');
+  save(); toast('Module deleted'); render();
+}
+
+// ═══════════════════════════════════════════
+// RESOURCE CRUD
+// ═══════════════════════════════════════════
+function saveResource() {
+  if(!guardAdmin()) return;
+  const midx=parseInt(document.getElementById('ar-module').value), name=document.getElementById('ar-name').value.trim();
+  if (!name||isNaN(midx)) { toast('Fill all required fields','error'); return; }
+  S.resources.push({module_idx:midx,name,category:document.getElementById('ar-cat').value,qty_requested:parseInt(document.getElementById('ar-qty').value)||1,qty_approved:0,qty_received:0,notes:document.getElementById('ar-notes').value,status:'pending',date_added:today()});
+  const mName=S.modules[midx]?.name||'?';
+  logEvent('resource',`Resource added: <strong>${name}</strong> for <strong>${mName}</strong>`,'#3b5bdb');
+  activeMod=midx; save(); closeModal('add-resource'); toast('Resource added!'); render();
+}
+
+function openUpdateReceived(gi) {
+  if(!guardAdmin()) return;
+  const r=S.resources[gi];
+  document.getElementById('ur-info').querySelector('span').innerHTML=`<strong>${r.name}</strong> — Requested: <strong>${r.qty_requested}</strong>`;
+  document.getElementById('ur-approved').value=r.qty_approved||0;
+  document.getElementById('ur-received').value=r.qty_received||0;
+  document.getElementById('ur-status').value=r.status||'pending';
+  document.getElementById('ur-date').value=r.date_received||today();
+  document.getElementById('ur-idx').value=gi;
+  // Show linked request
+  const linked=S.requests.find(req=>req.module_idx===r.module_idx&&req.item.toLowerCase()===r.name.toLowerCase());
+  document.getElementById('ur-linked-req').innerHTML=linked?`<i class="fa-solid fa-link" style="color:var(--green);margin-right:5px"></i>Linked request found: "<strong>${linked.item}</strong>" (${linked.status}) — status will sync on save.`:`<i class="fa-solid fa-link-slash" style="color:var(--muted-light);margin-right:5px"></i>No linked authority request found for this item.`;
+  document.getElementById('modal-update-received').classList.add('open');
+}
+
+function saveReceived() {
+  if(!guardAdmin()) return;
+  const gi=parseInt(document.getElementById('ur-idx').value); const r=S.resources[gi];
+  const prevRec=r.qty_received;
+  r.qty_approved=parseInt(document.getElementById('ur-approved').value)||0;
+  r.qty_received=parseInt(document.getElementById('ur-received').value)||0;
+  r.status=document.getElementById('ur-status').value;
+  r.date_received=document.getElementById('ur-date').value;
+  // Auto-sync linked request
+  const linked=S.requests.findIndex(req=>req.module_idx===r.module_idx&&req.item.toLowerCase()===r.name.toLowerCase());
+  if (linked>=0) {
+    S.requests[linked].qty_approved=r.qty_approved;
+    S.requests[linked].qty_received=r.qty_received;
+    if (r.qty_received>=r.qty_requested) S.requests[linked].status='received';
+    else if (r.qty_received>0) S.requests[linked].status='partial';
+    else if (r.qty_approved>0) S.requests[linked].status='approved';
+    logEvent('request',`Authority request auto-updated for <strong>${r.name}</strong> → ${S.requests[linked].status}`,'#2f9e44');
+  }
+  logEvent('resource',`Resource updated: <strong>${r.name}</strong> — received: ${prevRec}→${r.qty_received}, status: ${r.status}`,'#0c8599');
+  save(); closeModal('update-received'); toast('Updated! Linked request synced.'); render();
+}
+
+function deleteResource(gi) {
+  if(!guardAdmin()) return;
+  if (!confirm(`Delete "${S.resources[gi].name}"?`)) return;
+  const name=S.resources[gi].name;
+  S.resources.splice(gi,1);
+  S.distributions=S.distributions.filter(d=>d.resource_idx!==gi).map(d=>({...d,resource_idx:d.resource_idx>gi?d.resource_idx-1:d.resource_idx}));
+  S.returns=S.returns.filter(r=>r.resource_idx!==gi).map(r=>({...r,resource_idx:r.resource_idx>gi?r.resource_idx-1:r.resource_idx}));
+  logEvent('resource',`Resource deleted: <strong>${name}</strong>`,'#c92a2a');
+  save(); toast('Deleted'); render();
+}
+
+// ═══════════════════════════════════════════
+// ISSUE
+// ═══════════════════════════════════════════
+function openIssue(gi) {
+  if(!guardAdmin()) return;
+  const r=S.resources[gi]; const st=resStats(gi); const avail=st.net;
+  document.getElementById('issue-info').querySelector('span').innerHTML=`<strong>${r.name}</strong> | Available: <strong style="color:var(--green)">${avail}</strong> | Requested by: <strong>${S.modules[r.module_idx]?.name||'—'}</strong>`;
+  document.getElementById('issue-idx').value=gi;
+  document.getElementById('issue-qty').value=1; document.getElementById('issue-qty').max=avail;
+  document.getElementById('issue-to-person').value=''; document.getElementById('issue-notes').value='';
+  document.getElementById('issue-to-module').innerHTML=`<option value="">— Select module —</option>`+S.modules.map((m,i)=>`<option value="${i}">${m.name} (${m.leader})</option>`).join('');
+  document.getElementById('modal-issue').classList.add('open');
+}
+
+function saveIssue() {
+  if(!guardAdmin()) return;
+  const gi=parseInt(document.getElementById('issue-idx').value); const r=S.resources[gi];
+  const qty=parseInt(document.getElementById('issue-qty').value)||0;
+  const toMod=document.getElementById('issue-to-module').value;
+  const toPerson=document.getElementById('issue-to-person').value.trim();
+  if (qty<=0){toast('Enter valid quantity','error');return;} if(toMod===''){toast('Select recipient module','error');return;} if(!toPerson){toast('Enter who this is for','error');return;}
+  const st=resStats(gi);
+  if (qty>st.net){toast(`Only ${st.net} available`,'error');return;}
+  S.distributions.push({resource_idx:gi,resource_module_idx:r.module_idx,to_module_idx:parseInt(toMod),issued_to:toPerson,qty,date:document.getElementById('issue-date').value,expect_return:document.getElementById('issue-expect-return').value,notes:document.getElementById('issue-notes').value});
+  const toModName=S.modules[parseInt(toMod)]?.name||'?';
+  logEvent('distribution',`Issued <strong>${qty}× ${r.name}</strong> to <strong>${toPerson}</strong> (${toModName})`,'#6741d9');
+  save(); closeModal('issue'); toast(`Issued ${qty}× ${r.name}`); render();
+}
+
+// ═══════════════════════════════════════════
+// RETURN & WRITE-OFF
+// ═══════════════════════════════════════════
+function saveReturn() {
+  if(!guardAdmin()) return;
+  const gi=parseInt(document.getElementById('ret-resource').value);
+  if (isNaN(gi)){toast('Select a resource','error');return;}
+  const qty=parseInt(document.getElementById('ret-qty').value)||0;
+  const by=document.getElementById('ret-by').value.trim();
+  if (!by||qty<=0){toast('Fill all fields','error');return;}
+  S.returns.push({resource_idx:gi,type:'return',qty,returned_by:by,condition:document.getElementById('ret-cond').value,date:document.getElementById('ret-date').value,notes:document.getElementById('ret-notes').value});
+  logEvent('return',`Returned <strong>${qty}× ${S.resources[gi].name}</strong> by <strong>${by}</strong>`,'#2f9e44');
+  save(); closeModal('log-return'); toast('Return logged!'); render();
+}
+
+function saveWriteoff() {
+  if(!guardAdmin()) return;
+  const gi=parseInt(document.getElementById('wo-resource').value);
+  if (isNaN(gi)){toast('Select a resource','error');return;}
+  const qty=parseInt(document.getElementById('wo-qty').value)||0;
+  if (qty<=0){toast('Enter quantity','error');return;}
+  const reason=document.getElementById('wo-reason').value;
+  S.returns.push({resource_idx:gi,type:'writeoff',qty,reason,reported_by:document.getElementById('wo-by').value,date:document.getElementById('wo-date').value,notes:document.getElementById('wo-notes').value});
+  logEvent('writeoff',`Write-off: <strong>${qty}× ${S.resources[gi].name}</strong> — ${reason}`,'#c92a2a');
+  save(); closeModal('log-writeoff'); toast('Write-off recorded'); render();
+}
+
+// ═══════════════════════════════════════════
+// REQUESTS CRUD
+// ═══════════════════════════════════════════
+function saveRequest() {
+  if(!guardAdmin()) return;
+  const midx=parseInt(document.getElementById('req-module').value);
+  const item=document.getElementById('req-item').value.trim();
+  if (!item||isNaN(midx)){toast('Fill required fields','error');return;}
+  const ei=document.getElementById('req-edit-idx').value;
+  const obj={module_idx:midx,item,qty:parseInt(document.getElementById('req-qty').value)||1,qty_approved:parseInt(document.getElementById('req-approved').value)||0,qty_received:parseInt(document.getElementById('req-received').value)||0,reason:document.getElementById('req-reason').value,date:document.getElementById('req-date').value,status:document.getElementById('req-status').value};
+  if (ei!=='') { S.requests[parseInt(ei)]=obj; logEvent('request',`Request updated: <strong>${item}</strong>`,'#e67700'); toast('Request updated!'); }
+  else { S.requests.push(obj); logEvent('request',`New request submitted: <strong>${item}</strong> for <strong>${S.modules[midx]?.name||'?'}</strong>`,'#e67700'); toast('Request submitted!'); }
+  save(); closeModal('new-request'); render();
+}
+
+function editRequest(i) {
+  if(!guardAdmin()) return;
+  const r=S.requests[i];
+  document.getElementById('req-modal-title').textContent='Edit Request';
+  document.getElementById('req-module').innerHTML=modOpts(r.module_idx);
+  document.getElementById('req-date').value=r.date; document.getElementById('req-item').value=r.item;
+  document.getElementById('req-qty').value=r.qty; document.getElementById('req-approved').value=r.qty_approved||0;
+  document.getElementById('req-received').value=r.qty_received||0;
+  document.getElementById('req-reason').value=r.reason||''; document.getElementById('req-status').value=r.status;
+  document.getElementById('req-edit-idx').value=i;
+  document.getElementById('modal-new-request').classList.add('open');
+}
+
+function deleteRequest(i) {
+  if(!guardAdmin()) return;
+  if (!confirm('Delete this request?')) return;
+  const name=S.requests[i].item; S.requests.splice(i,1);
+  logEvent('request',`Request deleted: <strong>${name}</strong>`,'#c92a2a');
+  save(); toast('Deleted'); render();
+}
+
+// ═══════════════════════════════════════════
+// IMPORT
+// ═══════════════════════════════════════════
+let importedRows = [];
+
+function handleFileDrop(e) {
+  e.preventDefault(); document.getElementById('drop-zone').classList.remove('dragover');
+  const file=e.dataTransfer.files[0]; if(file) processFile(file);
+}
+function handleFileUpload(e) { const file=e.target.files[0]; if(file) processFile(file); e.target.value=''; }
+
+function processFile(file) {
+  const ext=file.name.split('.').pop().toLowerCase();
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    let data;
+    if (ext==='csv') {
+      const lines=ev.target.result.split('\n').filter(l=>l.trim());
+      const headers=lines[0].split(',').map(h=>h.trim().replace(/"/g,''));
+      data=lines.slice(1).map(l=>{const vals=l.split(',').map(v=>v.trim().replace(/"/g,'')); const obj={}; headers.forEach((h,i)=>obj[h]=vals[i]||''); return obj;});
+    } else {
+      const wb=XLSX.read(ev.target.result,{type:'binary'});
+      data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    }
+    importedRows=data.filter(row=>row['Item Name']||row['item name']||row['Item']);
+    if (!importedRows.length){toast('No valid rows found. Check column names.','error');return;}
+    document.getElementById('import-module-sel').style.display='';
+    document.getElementById('import-module').innerHTML=modOpts(activeMod);
+    const preview=document.getElementById('import-preview');
+    preview.innerHTML=`<div style="margin-top:10px"><div class="tc-title" style="margin-bottom:8px"><i class="fa-solid fa-eye"></i>Preview (${importedRows.length} rows)</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.76rem">${Object.keys(importedRows[0]).map(k=>`<th style="background:#fafbfc;padding:6px 10px;text-align:left;border-bottom:1px solid var(--border);font-weight:700;font-size:.63rem;text-transform:uppercase">${k}</th>`).join('')}${importedRows.slice(0,5).map(row=>`<tr>${Object.values(row).map(v=>`<td style="padding:6px 10px;border-bottom:1px solid var(--border-soft)">${v}</td>`).join('')}</tr>`).join('')}</table>${importedRows.length>5?`<div style="font-size:.72rem;color:var(--muted);padding:6px 10px">…and ${importedRows.length-5} more rows</div>`:''}</div></div>`;
+    toast(`Loaded ${importedRows.length} rows from ${file.name}`);
+  };
+  if (ext==='csv') reader.readAsText(file); else reader.readAsBinaryString(file);
+}
+
+function confirmImport() {
+  if(!guardAdmin()) return;
+  const midx=parseInt(document.getElementById('import-module').value);
+  if (isNaN(midx)){toast('Select a module','error');return;}
+  let added=0;
+  importedRows.forEach(row=>{
+    const name=(row['Item Name']||row['item name']||row['Item']||'').trim();
+    if (!name) return;
+    S.resources.push({module_idx:midx,name,category:row['Category']||row['category']||'Other',qty_requested:parseInt(row['Qty Requested']||row['qty_requested']||row['Quantity']||1),qty_approved:parseInt(row['Qty Approved']||row['qty_approved']||row['Qty Requested']||row['qty_requested']||row['Quantity']||0)||0,qty_received:parseInt(row['Qty Received']||row['Qty Received ']||row['qty_received']||0)||0,notes:row['Notes']||row['notes']||'',status:(parseInt(row['Qty Received']||row['Qty Received ']||row['qty_received']||0)||0)>=(parseInt(row['Qty Requested']||row['qty_requested']||row['Quantity']||1)||1)?'received':((parseInt(row['Qty Received']||row['Qty Received ']||row['qty_received']||0)||0)>0?'partial':'pending'),date_added:today()});
+    added++;
+  });
+  logEvent('import',`Imported <strong>${added}</strong> resources into <strong>${S.modules[midx]?.name||'?'}</strong>`,'#2f9e44');
+  save(); cancelImport(); activeMod=midx; switchTab('tracker'); toast(`Imported ${added} resources!`);
+}
+
+function cancelImport() { importedRows=[]; document.getElementById('import-module-sel').style.display='none'; document.getElementById('import-preview').innerHTML=''; document.getElementById('file-upload').value=''; }
+
+// ═══════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════
+function exportSheet(type) {
+  let data=[], filename='';
+  if (type==='resources') {
+    data=S.resources.map((r,gi)=>{ const m=S.modules[r.module_idx]; const st=resStats(gi); return {'Module':m?.name,'Leader':m?.leader,'Item Name':r.name,'Category':r.category,'Qty Requested':r.qty_requested,'Qty Approved':r.qty_approved,'Qty Received':r.qty_received,'Issued':st.issued,'Returned':st.returned,'Lost/Used':st.lostUsed,'Net Remaining':st.net,'Status':r.status,'Date Added':r.date_added}; });
+    filename='resources';
+  } else if (type==='distributions') {
+    data=S.distributions.map(d=>({'Date':d.date,'Item':S.resources[d.resource_idx]?.name,'From Module':S.modules[d.resource_module_idx]?.name,'To Module':S.modules[d.to_module_idx]?.name,'Issued To':d.issued_to,'Qty':d.qty,'Return Expected?':d.expect_return,'Notes':d.notes}));
+    filename='distributions';
+  } else if (type==='returns') {
+    data=S.returns.map(r=>({'Date':r.date,'Type':r.type==='writeoff'?'Write-off':'Return','Item':S.resources[r.resource_idx]?.name,'Qty':r.qty,'Returned By':r.returned_by||r.reported_by,'Condition / Reason':r.condition||r.reason,'Notes':r.notes}));
+    filename='returns_writeoffs';
+  } else if (type==='requests') {
+    data=S.requests.map(r=>({'Date':r.date,'Module':S.modules[r.module_idx]?.name,'Leader':S.modules[r.module_idx]?.leader,'Item':r.item,'Qty Requested':r.qty,'Qty Approved':r.qty_approved||0,'Qty Received':r.qty_received||0,'Reason':r.reason,'Status':r.status}));
+    filename='authority_requests';
+  }
+  if (!data.length){toast('No data to export','error');return;}
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,filename);
+  XLSX.writeFile(wb,`skillup_${filename}_${today()}.xlsx`);
+  toast('Downloaded!');
+}
+
+function exportAllXLSX() {
+  const wb=XLSX.utils.book_new();
+  // Resources sheet
+  const resData=S.resources.map((r,gi)=>{ const m=S.modules[r.module_idx]; const st=resStats(gi); return {'Module':m?.name,'Leader':m?.leader,'Item Name':r.name,'Category':r.category,'Qty Requested':r.qty_requested,'Qty Approved':r.qty_approved,'Qty Received':r.qty_received,'Issued':st.issued,'Returned':st.returned,'Lost/Used':st.lostUsed,'Net Remaining':st.net,'Status':r.status}; });
+  if (resData.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(resData),'Resources');
+  // Distributions
+  const distData=S.distributions.map(d=>({'Date':d.date,'Item':S.resources[d.resource_idx]?.name,'From Module':S.modules[d.resource_module_idx]?.name,'To Module':S.modules[d.to_module_idx]?.name,'Issued To':d.issued_to,'Qty':d.qty,'Return Expected':d.expect_return,'Notes':d.notes}));
+  if (distData.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(distData),'Distribution');
+  // Returns
+  const retData=S.returns.map(r=>({'Date':r.date,'Type':r.type==='writeoff'?'Write-off':'Return','Item':S.resources[r.resource_idx]?.name,'Qty':r.qty,'By':r.returned_by||r.reported_by,'Detail':r.condition||r.reason,'Notes':r.notes}));
+  if (retData.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(retData),'Returns');
+  // Requests
+  const reqData=S.requests.map(r=>({'Date':r.date,'Module':S.modules[r.module_idx]?.name,'Item':r.item,'Qty Req':r.qty,'Qty Approved':r.qty_approved||0,'Qty Received':r.qty_received||0,'Status':r.status,'Reason':r.reason}));
+  if (reqData.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(reqData),'Authority Requests');
+  if (!wb.SheetNames.length){toast('No data to export','error');return;}
+  XLSX.writeFile(wb,`skillup_full_export_${today()}.xlsx`);
+  toast('Full export downloaded!');
+}
+
+
+// ═══════════════════════════════════════════
+// USER FRIENDLY FEATURE PACK
+// ═══════════════════════════════════════════
+function markSaved(){
+  const el=document.getElementById('save-status');
+  if(!el) return;
+  el.innerHTML='<i class="fa-solid fa-cloud-check"></i><strong>Saved</strong>';
+  el.title='Data saved in this browser';
+}
+function smartCounts(){
+  const pending=S.requests.filter(r=>r.status==='pending').length;
+  const partial=S.resources.filter(r=>r.status==='partial').length;
+  const depleted=S.resources.filter((_,i)=>{const st=resStats(i);return st.net<=0 && (S.resources[i]?.qty_received||0)>0}).length;
+  const over=S.resources.filter(r=>(r.qty_received||0)>(r.qty_requested||0)).length;
+  return {pending,partial,depleted,over,total:S.resources.length};
+}
+function renderUtilityStrip(){
+  const el=document.getElementById('smart-utility-strip'); if(!el) return;
+  const c=smartCounts();
+  el.innerHTML=`<span class="utility-pill"><i class="fa-solid fa-boxes-stacked"></i><strong>${c.total}</strong> resources</span><span class="utility-pill"><i class="fa-solid fa-clock"></i><strong>${c.pending}</strong> pending</span><span class="utility-pill"><i class="fa-solid fa-circle-half-stroke"></i><strong>${c.partial}</strong> partial</span><span class="utility-pill"><i class="fa-solid fa-triangle-exclamation"></i><strong>${c.depleted}</strong> depleted</span><button class="btn btn-secondary btn-sm" onclick="switchTab('reports')"><i class="fa-solid fa-chart-line"></i>View Smart Report</button>`;
+}
+function renderReports(){
+  const el=document.getElementById('reports-content'); if(!el) return;
+  const c=smartCounts();
+  const requested=S.resources.reduce((a,r)=>a+(+r.qty_requested||0),0), received=S.resources.reduce((a,r)=>a+(+r.qty_received||0),0), approved=S.resources.reduce((a,r)=>a+(+r.qty_approved||0),0);
+  const issued=S.distributions.reduce((a,d)=>a+(+d.qty||0),0), returned=S.returns.filter(r=>r.type==='return').reduce((a,r)=>a+(+r.qty||0),0), written=S.returns.filter(r=>r.type==='writeoff').reduce((a,r)=>a+(+r.qty||0),0);
+  const fill=requested?Math.round((received/requested)*100):0;
+  const byCategory={}; S.resources.forEach(r=>{byCategory[r.category||'Other']=(byCategory[r.category||'Other']||0)+(+r.qty_requested||0)});
+  const catRows=Object.entries(byCategory).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="health-line"><span>${k}</span><strong>${v}</strong></div>`).join('')||'<div class="empty-state" style="padding:12px">No category data</div>';
+  const attention=S.resources.map((r,i)=>({r,i,st:resStats(i)})).filter(x=>x.r.status==='pending'||x.r.status==='partial'||x.st.net<=0).slice(0,8).map(x=>`<tr><td><strong>${x.r.name}</strong><div class="resource-note">${x.r.notes||''}</div></td><td>${x.r.category||'Other'}</td><td>${x.r.qty_requested}</td><td>${x.r.qty_received}</td><td>${x.st.net}</td><td>${statusBadge(x.r.status)}</td></tr>`).join('');
+  el.innerHTML=`<div class="stats-row">${sc('Fulfilment',fill+'%',received+' of '+requested+' received','fa-chart-pie','#2f9e44','#ebfbee','#2f9e44')}${sc('Pending Requests',c.pending,'need follow-up','fa-clock','#e67700','#fff9db','#e67700')}${sc('Partial Items',c.partial,'partly received','fa-circle-half-stroke','#0c8599','#e3fafc','#0c8599')}${sc('Issued / Returned',issued+'/'+returned,'write-off: '+written,'fa-share-nodes','#6741d9','#f3f0ff','#6741d9')}</div><div class="health-grid"><div class="health-card"><div class="health-title"><i class="fa-solid fa-heart-pulse"></i> Inventory Health</div><div class="health-line"><span>Total approved</span><strong>${approved}</strong></div><div class="health-line"><span>Total requested</span><strong>${requested}</strong></div><div class="health-line"><span>Over-received items</span><strong>${c.over}</strong></div><div class="health-line"><span>Depleted items</span><strong>${c.depleted}</strong></div></div><div class="health-card"><div class="health-title"><i class="fa-solid fa-tags"></i> Requested Qty by Category</div>${catRows}</div><div class="health-card"><div class="health-title"><i class="fa-solid fa-lightbulb"></i> Suggested Follow-up</div><div class="health-line"><span>Call authority for pending items</span><strong>${c.pending}</strong></div><div class="health-line"><span>Verify partial deliveries</span><strong>${c.partial}</strong></div><div class="health-line"><span>Check return expected items</span><strong>${S.distributions.filter(d=>d.expect_return==='yes').length}</strong></div></div></div><div class="table-card"><div class="tc-header"><div class="tc-title"><i class="fa-solid fa-clipboard-list"></i>Items Needing Attention</div></div><table><thead><tr><th>Item</th><th>Category</th><th>Req.</th><th>Received</th><th>Net</th><th>Status</th></tr></thead><tbody>${attention||'<tr><td colspan="6"><div class="empty-state"><i class="fa-solid fa-circle-check"></i><p>No urgent items</p><small>Everything looks good.</small></div></td></tr>'}</tbody></table></div>`;
+}
+function reportSummaryText(){
+  const c=smartCounts();
+  const requested=S.resources.reduce((a,r)=>a+(+r.qty_requested||0),0), received=S.resources.reduce((a,r)=>a+(+r.qty_received||0),0);
+  return `Skill Up Resource Summary\nModule: ${S.modules[0]?.name||'N/A'}\nLeader: ${S.modules[0]?.leader||'N/A'}\nTotal resources: ${S.resources.length}\nRequested quantity: ${requested}\nReceived quantity: ${received}\nPending requests: ${c.pending}\nPartial items: ${c.partial}\nDepleted items: ${c.depleted}`;
+}
+async function copyReportSummary(){
+  try{ await navigator.clipboard.writeText(reportSummaryText()); toast('Report summary copied'); }
+  catch(e){ toast('Copy not available on this browser','error'); }
+}
+function renderSettings(){ markSaved(); }
+function toggleDarkMode(force){
+  const next=typeof force==='boolean'?force:!document.body.classList.contains('dark-mode');
+  document.body.classList.toggle('dark-mode',next); localStorage.setItem('skillup_dark_mode',next?'1':'0');
+  toast(next?'Dark mode enabled':'Light mode enabled');
+}
+function backupJSON(){
+  const data=JSON.stringify({...S,backup_created_at:new Date().toISOString()},null,2);
+  const blob=new Blob([data],{type:'application/json'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=`skillup_backup_${today()}.json`; a.click(); URL.revokeObjectURL(a.href); toast('Backup downloaded');
+}
+function restoreJSON(event){
+  const file=event.target.files?.[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{ try{ const data=JSON.parse(reader.result); if(!data.modules||!data.resources) throw new Error('Invalid backup'); if(!confirm('Restore this backup and replace current data?')) return; S=data; delete S.backup_created_at; save(); render(); toast('Backup restored'); }catch(e){ toast('Invalid backup file','error'); } event.target.value=''; };
+  reader.readAsText(file);
+}
+function toggleFabMenu(force){
+  const el=document.getElementById('fab-menu'); if(!el) return;
+  if(typeof force==='boolean') el.classList.toggle('open',force); else el.classList.toggle('open');
+}
+const commandActions=[
+  ['Overview','fa-chart-pie','Go to dashboard',()=>switchTab('overview')],['Resource Tracker','fa-boxes-stacked','Open tracker',()=>switchTab('tracker')],['Distribution','fa-share-nodes','Issue resources',()=>switchTab('distribute')],['Returns','fa-rotate-left','Log returns',()=>switchTab('returns')],['Authority Requests','fa-file-signature','View requests',()=>switchTab('requests')],['Reports','fa-chart-line','Smart report',()=>switchTab('reports')],['Settings','fa-gear','Data tools',()=>switchTab('settings')],['Add Resource','fa-plus','Create item',()=>openModal('add-resource')],['New Request','fa-paper-plane','Create request',()=>openModal('new-request')],['Backup Data','fa-download','Download JSON',()=>backupJSON()],['Export Excel','fa-file-excel','Download workbook',()=>exportAllXLSX()],['Toggle Dark Mode','fa-moon','Theme',()=>toggleDarkMode()]
+];
+function openCommandPalette(){ document.getElementById('command-palette')?.classList.add('open'); const inp=document.getElementById('command-input'); if(inp){inp.value=''; setTimeout(()=>inp.focus(),20);} renderCommandPalette(); }
+function closeCommandPalette(){ document.getElementById('command-palette')?.classList.remove('open'); }
+function renderCommandPalette(){
+  const q=(document.getElementById('command-input')?.value||'').toLowerCase(); const list=document.getElementById('command-list'); if(!list) return;
+  const resourceActions=S.resources.map((r,i)=>[`Open: ${r.name}`,'fa-box',`${r.category||'Resource'} · ${r.status}`,()=>{activeMod=r.module_idx||0;switchTab('tracker');setTimeout(()=>{document.getElementById('global-search').value=r.name;applySearch();},30)}]);
+  const rows=[...commandActions,...resourceActions].filter(a=>(a[0]+' '+a[2]).toLowerCase().includes(q)).slice(0,12);
+  list.innerHTML=rows.map((a,idx)=>`<button class="command-item" onclick="runCommand(${idx})"><i class="fa-solid ${a[1]}"></i><span>${a[0]}</span><small>${a[2]}</small></button>`).join('')||'<div class="empty-state" style="padding:18px"><i class="fa-solid fa-magnifying-glass"></i><p>No matches</p></div>';
+  window.__commandRows=rows;
+}
+function runCommand(idx){ const a=window.__commandRows?.[idx]; if(!a) return; closeCommandPalette(); a[3](); }
+function renderTrackerMobileCards(rows){
+  const el=document.getElementById('tracker-mobile-cards'); if(!el) return;
+  el.innerHTML=rows.map(({r,gi})=>{ const st=resStats(gi); return `<div class="mobile-resource-card"><h4>${r.name}</h4><div>${statusBadge(r.status)} <span class="cat-tag">${r.category||'Other'}</span></div><div class="mobile-resource-meta"><span>Requested<strong>${r.qty_requested}</strong></span><span>Received<strong>${r.qty_received}</strong></span><span>Issued<strong>${st.issued}</strong></span><span>Remaining<strong>${st.net}</strong></span></div>${r.notes?`<div class="resource-note">${r.notes}</div>`:''}<div class="mobile-resource-actions"><button class="btn btn-secondary btn-xs" onclick="openUpdateReceived(${gi})"><i class="fa-solid fa-pen"></i>Update</button><button class="btn btn-primary btn-xs" onclick="openIssue(${gi})"><i class="fa-solid fa-share"></i>Issue</button></div></div>`; }).join('') || '<div class="empty-state"><i class="fa-solid fa-box-open"></i><p>No matching resources</p></div>';
+}
+
+// ═══════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════
+function toast(msg, type='success') {
+  const el=document.getElementById('toast'); const ic=document.getElementById('toast-icon'); const mt=document.getElementById('toast-msg');
+  mt.textContent=msg; el.style.background=type==='error'?'var(--red)':'var(--text)';
+  ic.className=type==='error'?'fa-solid fa-circle-xmark':'fa-solid fa-circle-check';
+  el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+
+
+// ═══════════════════════════════════════════
+// SUPABASE INTEGRATION + VIEW / ADMIN MODE
+// ═══════════════════════════════════════════
+function openLoginModal(){
+  if(!DB_ENABLED){ toast('Add Supabase URL and publishable key first','error'); return; }
+  document.getElementById('modal-admin-login')?.classList.add('open');
+}
+
+async function adminLogin(){
+  if(!sb) return toast('Supabase is not configured','error');
+  const email=document.getElementById('login-email').value.trim();
+  const password=document.getElementById('login-password').value;
+  if(!email||!password) return toast('Enter email and password','error');
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  if(error){ toast(error.message,'error'); return; }
+  currentUser=data.user; isAdmin=!!currentUser;
+  closeModal('admin-login');
+  await loadSupabaseData({silent:true});
+  applyAccessMode();
+  toast('Admin login successful');
+}
+
+async function adminLogout(){
+  if(sb) await sb.auth.signOut();
+  currentUser=null; isAdmin=false;
+  applyAccessMode();
+  await loadSupabaseData({silent:true});
+  toast('Logged out. View-only mode enabled.');
+}
+
+function applyAccessMode(){
+  document.body.classList.toggle('viewer-mode', !isAdmin);
+  document.body.classList.toggle('offline-db', !DB_ENABLED);
+  const auth=document.getElementById('auth-status');
+  const btn=document.getElementById('auth-action-btn');
+  if(auth){
+    if(!DB_ENABLED){ auth.innerHTML='<span class="sync-dot err"></span><strong>Local mode</strong>'; auth.title='Supabase is not configured yet'; }
+    else if(isAdmin){ auth.innerHTML='<span class="sync-dot"></span><strong>Admin edit mode</strong>'; auth.title=currentUser?.email||'Logged in'; }
+    else { auth.innerHTML='<span class="sync-dot warn"></span><strong>View-only mode</strong>'; auth.title='Login required to edit'; }
+  }
+  if(btn){
+    if(!DB_ENABLED){ btn.innerHTML='<i class="fa-solid fa-database"></i>Configure DB'; btn.onclick=()=>toast('Paste your Supabase URL and publishable key in index.html','error'); }
+    else if(isAdmin){ btn.innerHTML='<i class="fa-solid fa-right-from-bracket"></i>Logout'; btn.onclick=adminLogout; }
+    else { btn.innerHTML='<i class="fa-solid fa-right-to-bracket"></i>Admin Login'; btn.onclick=openLoginModal; }
+  }
+  disableEditorControls();
+}
+
+function disableEditorControls(){
+  const editMarkers=["openModal('add-resource')","openModal('new-request')","openModal('add-module')","openModal('log-return')","openModal('log-writeoff')","openModal('import-simple')","openIssue(","openUpdateReceived(","editModule(","deleteModule(","deleteResource(","editRequest(","deleteRequest(","reloadPublicSpeakingSeed()","clearLog()"];
+  document.querySelectorAll('button').forEach(btn=>{
+    const oc=btn.getAttribute('onclick')||'';
+    const isEdit=editMarkers.some(m=>oc.includes(m));
+    if(isEdit){
+      btn.disabled=!isAdmin && DB_ENABLED;
+      btn.title=(!isAdmin && DB_ENABLED)?'Admin login required':(btn.title||'');
+      btn.classList.toggle('admin-disabled', !isAdmin && DB_ENABLED);
+    }
+  });
+}
+
+function guardAdmin(){
+  if(!DB_ENABLED) return true;
+  if(!isAdmin){ toast('Admin login required to edit data','error'); return false; }
+  return true;
+}
+
+function dbQueueSync(){
+  if(!DB_ENABLED || !isAdmin || !sb) return;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(syncStateToSupabase, 700);
+}
+
+function dbModuleToLocal(m){ return {id:m.id,name:m.name,leader:m.leader||'',color:m.color||1,start:m.start_date||'',end:m.end_date||'',desc:m.description||''}; }
+function dbResourceToLocal(r, moduleMap){ return {id:r.id,module_idx:moduleMap.get(r.module_id)??0,name:r.name,category:r.category||'Other',qty_requested:r.qty_requested||0,qty_approved:r.qty_approved||0,qty_received:r.qty_received||0,notes:r.notes||'',status:r.status||'pending',date_added:r.date_added||'',date_received:r.date_received||''}; }
+function dbRequestToLocal(r, moduleMap){ return {id:r.id,module_idx:moduleMap.get(r.module_id)??0,item:r.item,qty:r.qty||0,qty_approved:r.qty_approved||0,qty_received:r.qty_received||0,reason:r.reason||'',date:r.request_date||'',status:r.status||'pending'}; }
+function dbDistributionToLocal(d, resourceMap, moduleMap){ const ri=resourceMap.get(d.resource_id)??0; return {id:d.id,resource_idx:ri,resource_module_idx:S.resources[ri]?.module_idx??0,to_module_idx:moduleMap.get(d.to_module_id)??0,issued_to:d.issued_to||'',qty:d.qty||0,date:d.issue_date||'',expect_return:d.expect_return||'yes',notes:d.notes||''}; }
+function dbReturnToLocal(r, resourceMap){ return {id:r.id,resource_idx:resourceMap.get(r.resource_id)??0,type:r.type||'return',qty:r.qty||0,returned_by:r.returned_by||'',reported_by:r.reported_by||'',condition:r.condition||'',reason:r.reason||'',notes:r.notes||'',date:r.return_date||''}; }
+function dbLogToLocal(l){ return {id:l.id,type:l.type||'log',msg:l.message||'',color:l.color||'#3b5bdb',time:l.created_at||new Date().toISOString()}; }
+
+async function loadSupabaseData({silent=false}={}){
+  if(!DB_ENABLED || !sb){ applyAccessMode(); return; }
+  try{
+    isLoadingFromDb=true;
+    if(!silent) toast('Loading shared data...');
+    const [mods,resources,reqs,dists,rets,logs]=await Promise.all([
+      sb.from('modules').select('*').order('id'),
+      sb.from('resources').select('*').order('id'),
+      sb.from('requests').select('*').order('id'),
+      sb.from('distributions').select('*').order('id'),
+      sb.from('returns').select('*').order('id'),
+      sb.from('activity_log').select('*').order('created_at',{ascending:false}).limit(300)
+    ]);
+    const firstErr=[mods,resources,reqs,dists,rets,logs].find(x=>x.error)?.error;
+    if(firstErr) throw firstErr;
+    if((mods.data||[]).length){
+      const moduleMap=new Map();
+      S.modules=mods.data.map((m,i)=>{ moduleMap.set(m.id,i); return dbModuleToLocal(m); });
+      const resourceMap=new Map();
+      S.resources=resources.data.map((r,i)=>{ resourceMap.set(r.id,i); return dbResourceToLocal(r,moduleMap); });
+      S.requests=reqs.data.map(r=>dbRequestToLocal(r,moduleMap));
+      S.distributions=dists.data.map(d=>dbDistributionToLocal(d,resourceMap,moduleMap));
+      S.returns=rets.data.map(r=>dbReturnToLocal(r,resourceMap));
+      S.log=logs.data.map(dbLogToLocal);
+      localStorage.setItem('skillup_v3', JSON.stringify(S));
+    } else if(isAdmin){
+      S = defaultState();
+      localStorage.setItem('skillup_v3', JSON.stringify(S));
+      await syncStateToSupabase({silent:true});
+    }
+    if(activeMod>=S.modules.length) activeMod=0;
+    render();
+  }catch(e){
+    console.error(e);
+    toast('Could not load Supabase data: '+(e.message||e),'error');
+  }finally{
+    isLoadingFromDb=false;
+    applyAccessMode();
+  }
+}
+
+async function clearTable(name){
+  const {error}=await sb.from(name).delete().neq('id',0);
+  if(error) throw error;
+}
+
+async function syncStateToSupabase({silent=false}={}){
+  if(!DB_ENABLED || !isAdmin || !sb || isLoadingFromDb) return;
+  const auth=document.getElementById('auth-status');
+  try{
+    if(auth) auth.innerHTML='<span class="sync-dot warn"></span><strong>Syncing...</strong>';
+    await clearTable('activity_log');
+    await clearTable('returns');
+    await clearTable('distributions');
+    await clearTable('requests');
+    await clearTable('resources');
+    await clearTable('modules');
+    const moduleRows=S.modules.map(m=>({name:m.name,leader:m.leader||'',color:+m.color||1,start_date:m.start||null,end_date:m.end||null,description:m.desc||''}));
+    let insertedModules=[];
+    if(moduleRows.length){ const {data,error}=await sb.from('modules').insert(moduleRows).select(); if(error) throw error; insertedModules=data||[]; }
+    const moduleIds=insertedModules.map(m=>m.id);
+    const resourceRows=S.resources.map(r=>({module_id:moduleIds[r.module_idx]||moduleIds[0]||null,name:r.name,category:r.category||'Other',qty_requested:+r.qty_requested||0,qty_approved:+r.qty_approved||0,qty_received:+r.qty_received||0,notes:r.notes||'',status:r.status||'pending',date_added:r.date_added||today()}));
+    let insertedResources=[];
+    if(resourceRows.length){ const {data,error}=await sb.from('resources').insert(resourceRows).select(); if(error) throw error; insertedResources=data||[]; }
+    const resourceIds=insertedResources.map(r=>r.id);
+    const requestRows=S.requests.map(r=>({module_id:moduleIds[r.module_idx]||moduleIds[0]||null,item:r.item,qty:+r.qty||0,qty_approved:+r.qty_approved||0,qty_received:+r.qty_received||0,reason:r.reason||'',status:r.status||'pending',request_date:r.date||today()}));
+    if(requestRows.length){ const {error}=await sb.from('requests').insert(requestRows); if(error) throw error; }
+    const distributionRows=S.distributions.map(d=>({resource_id:resourceIds[d.resource_idx]||null,to_module_id:moduleIds[d.to_module_idx]||null,issued_to:d.issued_to||'',qty:+d.qty||0,expect_return:d.expect_return||'yes',notes:d.notes||'',issue_date:d.date||today()})).filter(d=>d.resource_id);
+    if(distributionRows.length){ const {error}=await sb.from('distributions').insert(distributionRows); if(error) throw error; }
+    const returnRows=S.returns.map(r=>({resource_id:resourceIds[r.resource_idx]||null,type:r.type||'return',qty:+r.qty||0,returned_by:r.returned_by||r.reported_by||'',condition:r.condition||'',reason:r.reason||'',notes:r.notes||'',return_date:r.date||today()})).filter(r=>r.resource_id);
+    if(returnRows.length){ const {error}=await sb.from('returns').insert(returnRows); if(error) throw error; }
+    const logRows=S.log.slice(0,250).map(l=>({type:l.type||'log',message:l.msg||'',color:l.color||'#3b5bdb',created_at:l.time||new Date().toISOString()}));
+    if(logRows.length){ const {error}=await sb.from('activity_log').insert(logRows); if(error) throw error; }
+    if(auth) auth.innerHTML='<span class="sync-dot"></span><strong>Synced</strong>';
+    if(!silent) toast('Synced to Supabase');
+  }catch(e){
+    console.error(e);
+    if(auth) auth.innerHTML='<span class="sync-dot err"></span><strong>Sync error</strong>';
+    toast('Sync error: '+(e.message||e),'error');
+  }finally{ applyAccessMode(); }
+}
+
+const __renderOriginal = render;
+render = function(){ __renderOriginal(); applyAccessMode(); };
+
+async function initApp(){
+  applyAccessMode();
+  if(DB_ENABLED && sb){
+    const {data}=await sb.auth.getSession();
+    currentUser=data?.session?.user||null;
+    isAdmin=!!currentUser;
+    sb.auth.onAuthStateChange((_event, session)=>{ currentUser=session?.user||null; isAdmin=!!currentUser; applyAccessMode(); });
+    await loadSupabaseData({silent:true});
+    setInterval(()=>{ const modalOpen=!!document.querySelector('.modal-overlay.open'); if(DB_ENABLED && !isAdmin && !modalOpen) loadSupabaseData({silent:true}); }, 15000);
+  } else { render(); applyAccessMode(); }
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.querySelector('.modal') && o.classList.remove('open');}));
+if(localStorage.getItem('skillup_dark_mode')==='1') document.body.classList.add('dark-mode');
+document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); openCommandPalette(); } if(e.key==='Escape'){ closeCommandPalette(); closeSidebar(); toggleFabMenu(false); document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open')); } });
+document.addEventListener('click',e=>{ if(!e.target.closest('.fab') && !e.target.closest('.fab-menu')) toggleFabMenu(false); });
+updateNavBadges();
+initApp();
+</script>
+</body>
+</html>
