@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -371,22 +372,14 @@ body.offline-db .db-only{display:none!important}
 </style>
 </head>
 <body>
-<div id="loginScreen" style="
-  position:fixed;
-  top:0; left:0;
-  width:100%; height:100%;
-  background:#0f172a;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  z-index:9999;
-">
-  <div style="background:white; padding:30px; border-radius:10px; width:300px;">
-    <h2>Login</h2>
-    <input id="email" type="email" placeholder="Email" style="width:100%; margin-bottom:10px; padding:8px;">
-    <input id="password" type="password" placeholder="Password" style="width:100%; margin-bottom:10px; padding:8px;">
-    <button onclick="login()" style="width:100%; padding:10px;">Login</button>
-    <p id="loginError" style="color:red;"></p>
+<div id="loginScreen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#0f172a;display:flex;align-items:center;justify-content:center;z-index:10000;">
+  <div style="background:white;padding:30px;border-radius:12px;width:320px;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+    <h2 style="margin-bottom:6px;color:#141517;">Login Required</h2>
+    <p style="font-size:13px;color:#6c757d;margin-bottom:14px;line-height:1.35;">Use your Supabase account to view this resource manager.</p>
+    <input id="email" type="email" placeholder="Email" style="width:100%;margin-bottom:10px;padding:10px;border:1px solid #e4e7ed;border-radius:8px;">
+    <input id="password" type="password" placeholder="Password" style="width:100%;margin-bottom:10px;padding:10px;border:1px solid #e4e7ed;border-radius:8px;">
+    <button onclick="login()" style="width:100%;padding:11px;border:0;border-radius:8px;background:#3b5bdb;color:#fff;font-weight:700;cursor:pointer;">Login</button>
+    <p id="loginError" style="color:#c92a2a;font-size:13px;margin-top:10px;min-height:18px;"></p>
   </div>
 </div>
 <a class="skip-link" href="#main-content">Skip to content</a>
@@ -430,7 +423,7 @@ body.offline-db .db-only{display:none!important}
     <div class="topbar-actions">
       <span class="utility-pill desktop-only" id="save-status"><i class="fa-solid fa-cloud-check"></i><strong>Saved</strong></span>
       <span class="auth-chip db-only" id="auth-status"><span class="sync-dot warn"></span><strong>View mode</strong></span>
-      <button class="btn btn-secondary db-only" id="auth-action-btn" onclick="openLoginModal()"><i class="fa-solid fa-right-to-bracket"></i>Admin Login</button>
+      <button class="btn btn-secondary db-only" id="auth-action-btn" onclick="openLoginModal()"><i class="fa-solid fa-right-from-bracket"></i>Logout</button>
       <div class="search-wrap" id="global-search-wrap" style="display:none">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input class="search-input" id="global-search" placeholder="Search resources…" oninput="applySearch()">
@@ -778,7 +771,7 @@ body.offline-db .db-only{display:none!important}
   <div class="modal">
     <div class="modal-head"><div class="modal-head-title"><i class="fa-solid fa-lock"></i>Admin Login</div><button class="close-btn" onclick="closeModal('admin-login')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body">
-      <div class="login-note">Public visitors can view all resource data. Only the configured Supabase admin account can add, edit, delete, import, reset, or sync data.</div>
+      <div class="login-note">Login is required to view this page. The configured admin account can add, edit, delete, import, reset, or sync data; other accounts are view-only.</div>
       <div class="form-group"><label class="form-label">Email</label><input type="email" id="login-email" placeholder="admin@example.com"></div>
       <div class="form-group"><label class="form-label">Password</label><input type="password" id="login-password" placeholder="Supabase password" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 11px;font-family:'Outfit',sans-serif;font-size:.83rem;outline:none"></div>
       <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal('admin-login')">Cancel</button><button class="btn btn-primary" onclick="adminLogin()"><i class="fa-solid fa-right-to-bracket"></i>Login</button></div>
@@ -792,27 +785,21 @@ body.offline-db .db-only{display:none!important}
 <div id="toast"><i class="fa-solid fa-circle-check" id="toast-icon"></i><span id="toast-msg">Saved</span></div>
 
 <script>
-    async function login() {
-        const email = document.getElementById("email").value;
-        const password = document.getElementById("password").value;
+async function login(){
+  if(!sb){ document.getElementById("loginError").innerText="Supabase is not configured correctly."; return; }
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+  if(!email||!password){ document.getElementById("loginError").innerText="Enter email and password."; return; }
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  if(error){ document.getElementById("loginError").innerText=error.message; return; }
+  currentUser=data.user;
+  isAdmin=currentUser.id===ADMIN_UID;
+  document.getElementById("loginScreen").style.display="none";
+  await loadSupabaseData({silent:true});
+  applyAccessMode();
+  toast(isAdmin?"Admin login successful":"Logged in as viewer");
+}
 
-        const { data, error } = await sb.auth.signInWithPassword({
-            email,
-            password
-        });
-
-        if (error) {
-            document.getElementById("loginError").innerText = error.message;
-            return;
-        }
-
-        currentUser = data.user;
-        isAdmin = currentUser.id === "YOUR_USER_UID_HERE";
-
-        document.getElementById("loginScreen").style.display = "none";
-
-        loadAllData(); // your existing function
-        }
 // ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
@@ -882,8 +869,9 @@ let S = (() => {
 // Supabase configuration
 // Paste your Project URL and Publishable key here before uploading to GitHub Pages.
 const SUPABASE_URL = "https://ecdeignuyvztzkmkipsl.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjZGVpZ251eXZ6dHprbWtpcHNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTI1ODIsImV4cCI6MjA5MzA2ODU4Mn0.Ck7JmXXQG3lVZ7PnNmLSqbs5CVrtof5UKaJHwCDX2rQ";
-const DB_ENABLED = SUPABASE_URL.startsWith('https://') && SUPABASE_PUBLISHABLE_KEY.startsWith('sb_');
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U1FLkfOUbLKoibbjEgpe8w_AGj5itgY";
+const DB_ENABLED = SUPABASE_URL.startsWith('https://') && SUPABASE_PUBLISHABLE_KEY.length > 20;
+const ADMIN_UID = '1c9c3813-96d8-4bc6-a273-12e7597f1aed';
 const sb = DB_ENABLED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
 let currentUser = null;
 let isAdmin = false;
@@ -1723,7 +1711,7 @@ async function adminLogin(){
   if(!email||!password) return toast('Enter email and password','error');
   const {data,error}=await sb.auth.signInWithPassword({email,password});
   if(error){ toast(error.message,'error'); return; }
-  currentUser=data.user; isAdmin=!!currentUser;
+  currentUser=data.user; isAdmin=currentUser?.id===ADMIN_UID;
   closeModal('admin-login');
   await loadSupabaseData({silent:true});
   applyAccessMode();
@@ -1734,8 +1722,8 @@ async function adminLogout(){
   if(sb) await sb.auth.signOut();
   currentUser=null; isAdmin=false;
   applyAccessMode();
-  await loadSupabaseData({silent:true});
-  toast('Logged out. View-only mode enabled.');
+  document.getElementById('loginScreen').style.display='flex';
+  toast('Logged out');
 }
 
 function applyAccessMode(){
@@ -1751,7 +1739,7 @@ function applyAccessMode(){
   if(btn){
     if(!DB_ENABLED){ btn.innerHTML='<i class="fa-solid fa-database"></i>Configure DB'; btn.onclick=()=>toast('Paste your Supabase URL and publishable key in index.html','error'); }
     else if(isAdmin){ btn.innerHTML='<i class="fa-solid fa-right-from-bracket"></i>Logout'; btn.onclick=adminLogout; }
-    else { btn.innerHTML='<i class="fa-solid fa-right-to-bracket"></i>Admin Login'; btn.onclick=openLoginModal; }
+    else { btn.innerHTML='<i class="fa-solid fa-right-from-bracket"></i>Logout'; btn.onclick=adminLogout; }
   }
   disableEditorControls();
 }
@@ -1875,17 +1863,36 @@ render = function(){ __renderOriginal(); applyAccessMode(); };
 
 async function initApp(){
   applyAccessMode();
-  if(DB_ENABLED && sb){
-    const {data}=await sb.auth.getSession();
-    currentUser=data?.session?.user||null;
-    isAdmin=!!currentUser;
-    sb.auth.onAuthStateChange((_event, session)=>{ currentUser=session?.user||null; isAdmin=!!currentUser; applyAccessMode(); });
-    await loadSupabaseData({silent:true});
-    setInterval(()=>{ const modalOpen=!!document.querySelector('.modal-overlay.open'); if(DB_ENABLED && !isAdmin && !modalOpen) loadSupabaseData({silent:true}); }, 15000);
-  } else { render(); applyAccessMode(); }
-}
 
-// ═══════════════════════════════════════════
+  if(!DB_ENABLED || !sb){
+    document.getElementById("loginScreen").style.display="flex";
+    render();
+    applyAccessMode();
+    return;
+  }
+
+  const {data}=await sb.auth.getSession();
+  currentUser=data?.session?.user||null;
+  isAdmin=currentUser?.id===ADMIN_UID;
+
+  sb.auth.onAuthStateChange((_event, session)=>{
+    currentUser=session?.user||null;
+    isAdmin=currentUser?.id===ADMIN_UID;
+    applyAccessMode();
+  });
+
+  if(!currentUser){
+    document.getElementById("loginScreen").style.display="flex";
+    return;
+  }
+
+  document.getElementById("loginScreen").style.display="none";
+  await loadSupabaseData({silent:true});
+  setInterval(()=>{
+    const modalOpen=!!document.querySelector(".modal-overlay.open");
+    if(DB_ENABLED && currentUser && !isAdmin && !modalOpen) loadSupabaseData({silent:true});
+  },15000);
+}
 // INIT
 // ═══════════════════════════════════════════
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.querySelector('.modal') && o.classList.remove('open');}));
@@ -1894,19 +1901,6 @@ document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey) && e.key.toLo
 document.addEventListener('click',e=>{ if(!e.target.closest('.fab') && !e.target.closest('.fab-menu')) toggleFabMenu(false); });
 updateNavBadges();
 initApp();
-async function checkSession() {
-  const { data } = await sb.auth.getSession();
-
-  if (data.session) {
-    currentUser = data.session.user;
-    isAdmin = currentUser.id === "YOUR_USER_UID_HERE";
-
-    document.getElementById("loginScreen").style.display = "none";
-    loadAllData();
-  }
-}
-
-checkSession();
 </script>
 </body>
 </html>
