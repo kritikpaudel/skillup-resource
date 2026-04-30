@@ -843,7 +843,7 @@ let S = (() => {
 // Supabase configuration
 // Paste your Project URL and Publishable key here before uploading to GitHub Pages.
 const SUPABASE_URL = "https://ecdeignuyvztzkmkipsl.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U1FLkfOUbLKoibbjEgpe8w_AGj5itgY";
+const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjZGVpZ251eXZ6dHprbWtpcHNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTI1ODIsImV4cCI6MjA5MzA2ODU4Mn0.Ck7JmXXQG3lVZ7PnNmLSqbs5CVrtof5UKaJHwCDX2rQ";
 const DB_ENABLED = SUPABASE_URL.startsWith('https://') && SUPABASE_PUBLISHABLE_KEY.startsWith('sb_');
 const sb = DB_ENABLED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
 let currentUser = null;
